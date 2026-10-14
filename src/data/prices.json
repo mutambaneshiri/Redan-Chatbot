@@ -1,0 +1,10 @@
+{
+  "_note": "Pump prices applied to every station whose town is listed in 'towns'. Copy the USD figures from https://www.zera.co.zw/ and update 'effective' to the 'As Of' date shown there.",
+  "source": "ZERA published price",
+  "effective": "2026-10-09",
+  "currency": "USD",
+  "towns": ["Harare"],
+  "blendPerLitre": 2.05,
+  "dieselPerLitre": 2.04,
+  "lpgPerKg": 1.76
+}

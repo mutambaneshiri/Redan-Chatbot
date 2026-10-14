@@ -1,0 +1,37 @@
+{
+  "name": "redan-chatbot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "eval": "tsx evals/run.ts",
+    "eval:quick": "tsx evals/run.ts --filter=smoke",
+    "verify": "tsx scripts/verify.ts",
+    "test:e2e": "tsx scripts/e2e.ts",
+    "test": "npm run verify && npm run test:e2e",
+    "models": "tsx scripts/models.ts",
+    "ask": "tsx scripts/ask.ts",
+    "doctor": "tsx scripts/doctor.ts",
+    "import:stations": "python scripts/import_stations.py"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
+    "dotenv": "^17.4.2",
+    "next": "^15.1.0",
+    "openai": "^7.15.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
