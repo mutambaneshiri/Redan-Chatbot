@@ -16,7 +16,8 @@
     "models": "tsx scripts/models.ts",
     "ask": "tsx scripts/ask.ts",
     "doctor": "tsx scripts/doctor.ts",
-    "import:stations": "python scripts/import_stations.py"
+    "import:stations": "python scripts/import_stations.py",
+    "build:places": "python scripts/build_places.py"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

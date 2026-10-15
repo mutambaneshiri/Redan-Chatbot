@@ -1,3 +1,4 @@
+import { describePlace, nearestPlace } from "./places";
 import {
   findStations,
   formatStation,
@@ -28,7 +29,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: "find_nearest_stations",
     description:
-      "Find Redan service stations by town, suburb or station name (or by distance when station locations are loaded). Returns phone, opening hours, fuel availability (blend/diesel), lubricants, refreshments, LPG gas, price if listed, and a maps link. Use this for ANY question about stations, a station's hours or phone, or what a station sells — never answer those from memory. Prefer a town or suburb name; also pass lat/lng if the customer shared a location.",
+      "Find Redan service stations by station name, or the nearest ones to ANY place in Zimbabwe the customer names — city, suburb, town, village, growth point, business centre, communal land, mission, mine or school — or to a shared location. Returns phone, opening hours, fuel availability (blend/diesel), lubricants, refreshments, LPG gas, price if listed, and a maps link. Use this for ANY question about stations, a station's hours or phone, or what a station sells — never answer those from memory. Pass the place exactly as the customer gave it (e.g. 'Mabvuku', 'Highfield, Harare', 'Murambinda'), even if you think Redan has no station there; also pass lat/lng if the customer shared a location.",
     parameters: {
       type: "object",
       properties: {
@@ -43,7 +44,7 @@ export const TOOL_SPECS: ToolSpec[] = [
         city: {
           type: "string",
           description:
-            "Town, suburb or city name, used when no coordinates are available (e.g. 'Bulawayo', 'Msasa').",
+            "Station name, or the customer's town, suburb, village or landmark anywhere in Zimbabwe (e.g. 'Bulawayo', 'Msasa', 'Glen View, Harare', 'Nyanga').",
         },
         fuel_type: {
           type: "string",
@@ -151,7 +152,7 @@ export async function executeTool(
         return typeof n === "number" && Number.isFinite(n) ? n : undefined;
       };
 
-      const matches = findStations({
+      const search = findStations({
         lat: num(input.lat),
         lng: num(input.lng),
         city: typeof input.city === "string" ? input.city : undefined,
@@ -161,9 +162,12 @@ export async function executeTool(
             : "any",
         onlyOpen24h: input.only_open_24h === true || input.only_open_24h === "true",
       });
+      const matches = search.stations;
       const limit = num(input.limit) ?? 3;
+      const lat = num(input.lat);
+      const lng = num(input.lng);
       const sharedLocationOnly =
-        num(input.lat) !== undefined && typeof input.city !== "string";
+        lat !== undefined && lng !== undefined && typeof input.city !== "string";
 
       if (matches.length === 0 && sharedLocationOnly && !STATIONS_HAVE_LOCATIONS) {
         return {
@@ -178,18 +182,37 @@ export async function executeTool(
         return {
           result: JSON.stringify({
             stations: [],
-            note: `No Redan station in the database matches${input.city ? ` "${input.city}"` : " those filters"}. Do NOT quote prices or hours from any other station as though they answered this question. Tell the customer you have no station listed there, and either suggest they name a larger nearby town or offer a human handoff.`,
+            note: `No Redan station in the database matches${input.city ? ` "${input.city}", and it is not a place in Zimbabwe we can locate` : " those filters"}. Do NOT quote prices or hours from any other station as though they answered this question. Ask the customer for the nearest town, suburb or growth point (or to share their location), and search again; if that fails, offer a human handoff.`,
           }),
         };
       }
 
+      const shown = matches.slice(0, limit);
+      const nearest = shown[0].distanceKm;
+      const where = search.place ? describePlace(search.place) : undefined;
+      const pin = sharedLocationOnly ? nearestPlace(lat!, lng!) : null;
+      let note: string | undefined;
+      if (search.nearestOnly && where) {
+        note = `Redan has no station in ${where}. These are the nearest Redan stations to it, by straight-line distance (road distance is longer). Tell the customer there is no station in ${search.place!.name} itself, then give these as the nearest, each with its town and roughly how far it is. Do NOT present them as being in ${search.place!.name}.${
+          nearest > 100
+            ? ` The nearest is over 100 km away, so say plainly that Redan has no station close to ${search.place!.name}.`
+            : ""
+        }${
+          search.place!.alternatives.length > 0
+            ? ` "${input.city}" could also mean ${search.place!.alternatives.map(describePlace).join(" or ")}; if the customer may be there instead, ask which one.`
+            : ""
+        }`;
+      } else if (matches.length > limit) {
+        note = `Showing ${limit} of ${matches.length} matching stations${where ? `, nearest to ${where} first` : ""}. Ask the customer for their suburb or a nearby landmark to narrow it down.`;
+      }
+
       return {
         result: JSON.stringify({
-          stations: matches.slice(0, limit).map(formatStation),
-          total_matching: matches.length,
-          ...(matches.length > limit && {
-            note: `Showing ${limit} of ${matches.length} matching stations. Ask the customer for their suburb or a nearby landmark to narrow it down.`,
-          }),
+          ...(where && { searched_place: where }),
+          ...(pin && { customer_is_near: describePlace(pin) }),
+          stations: shown.map(formatStation),
+          total_matching: search.nearestOnly ? shown.length : matches.length,
+          ...(note && { note }),
           prices_updated_at: PRICES_UPDATED_AT,
           data_status: STATION_DATA_IS_PLACEHOLDER
             ? "SEED DATA — tell the customer prices are indicative and to confirm at the station"

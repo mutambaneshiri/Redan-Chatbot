@@ -330,11 +330,13 @@ src/
       types.ts               provider interface and shared event types
     system-prompt.ts         persona, guardrails, knowledge-base injection
     tools.ts                 provider-neutral schemas and executors
-    stations.ts              distance ranking and filtering
+    stations.ts              station matching, distance ranking and filtering
+    places.ts                resolves any Zimbabwean place name to coordinates
     whatsapp-format.ts       flattens replies for WhatsApp rendering
   data/
     knowledge.md             the bot's source of truth, edit this
-    stations.json            placeholder seed data, replace this
+    stations.json            Redan's station list (npm run import:stations)
+    places.json              ~14,400 Zimbabwean places (npm run build:places)
 evals/
   cases.jsonl                30 test cases
   run.ts                     runner
@@ -348,6 +350,27 @@ Six of the seven backends speak the OpenAI-compatible `/chat/completions`
 protocol, so one implementation covers them all. Anthropic has its own API and
 its own implementation. Both satisfy one `Provider` interface, so the routes and
 the evaluation harness never know which is running.
+
+### Finding the nearest station to any place
+
+A customer can name any place in Zimbabwe, such as a city, suburb, village,
+growth point, business centre, communal land, mission, mine, school or farm.
+`src/data/places.json` lists about 14,400 of them with coordinates. It is
+built from the [GeoNames](https://www.geonames.org) Zimbabwe extract (CC BY 4.0)
+by `npm run build:places`. `src/lib/places.ts` resolves free text to one of
+them: "Mabvuku", "Highfield, Harare", "kuMabvuku", "Kuwadzan" (a typo) or
+"near Chishawasha Mission". Where Redan has no station there, the tool returns
+the nearest stations and tells the bot to say they are elsewhere.
+
+The station spreadsheet has no coordinates yet. Until it does, each station is
+placed at the centre of its suburb or town, distances are labelled
+approximate, and map links search by station name. A few stations whose name
+is not a gazetteer place sit at their town centre: Harare's Gaydon, Glaudina,
+Glenara, Liberation City, Rainham Park, Second Street, Seventh Street, Skyway
+and Seke Road; Bulawayo's Queen Lozikeyi and Southside; and Chachacha, which has
+no location at all. Add `LATITUDE` and `LONGITUDE` (or `MAPS LINK`) columns to
+the spreadsheet and re-run `npm run import:stations` to make every distance
+exact.
 
 ---
 
