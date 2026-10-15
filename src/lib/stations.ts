@@ -1,4 +1,10 @@
 import stationData from "@/data/stations.json";
+import {
+  editDistance,
+  haversineKm,
+  resolvePlace,
+  type ResolvedPlace,
+} from "./places";
 
 export type FuelInfo = { available: boolean; price: number | null };
 
@@ -17,6 +23,12 @@ export type Station = {
   manager?: string | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * True when lat/lng is the centre of the station's suburb or town (from the
+   * place gazetteer) rather than the site itself, because the spreadsheet has
+   * no coordinates for it yet.
+   */
+  locationApprox?: boolean;
   mapsLink?: string | null;
   hours: "24h" | "12h";
   openFrom?: string | null;
@@ -31,8 +43,52 @@ export type Station = {
 
 export type RankedStation = Station & { distanceKm: number };
 
-const stations = stationData.stations as Station[];
+/**
+ * Where to look a station up in the place gazetteer when its own name is not
+ * a place there, or names the wrong one. Anything not listed is looked up as
+ * "<station name>, <town>", falling back to the town.
+ */
+const LOCATION_HINTS: Record<string, string> = {
+  "Redan Zindoga": "Waterfalls, Harare",
+  "Redan Mandava": "Zvishavane",
+  "Redan Ngundu": "Ngundu Halt",
+  "Redan Nyamahobogo": "Rushinga",
+  // "Seke" alone is the rural district south of Chitungwiza.
+  "Redan Seke Road": "Harare",
+};
 
+const POPULATED = ["city", "suburb", "town", "village", "business centre"];
+
+/**
+ * Stations without coordinates in the spreadsheet get the centre of their
+ * suburb (if the gazetteer knows it and it lies in the station's town) or of
+ * their town, so they can still be ranked by distance. No fuzzy matching here:
+ * a near-miss spelling could put a station in the wrong province.
+ */
+function approxLocation(s: Station): { lat: number; lng: number } | null {
+  const hint = LOCATION_HINTS[s.name];
+  if (hint) return resolvePlace(hint, { fuzzy: false });
+
+  const town = resolvePlace(s.city, { fuzzy: false });
+  for (const label of [s.name, ...(s.aliases ?? [])]) {
+    const site = resolvePlace(`${label.replace(/^Redan\s+/i, "")}, ${s.city}`, { fuzzy: false });
+    if (
+      site &&
+      site.name !== town?.name &&
+      POPULATED.includes(site.kind) &&
+      (!town || haversineKm(site.lat, site.lng, town.lat, town.lng) <= 60)
+    ) {
+      return site;
+    }
+  }
+  return town;
+}
+
+const stations: Station[] = (stationData.stations as Station[]).map((s) => {
+  if (s.lat !== null && s.lng !== null) return s;
+  const at = approxLocation(s);
+  return at ? { ...s, lat: at.lat, lng: at.lng, locationApprox: true } : s;
+});
 
 /** True when the seed file is still placeholder data rather than Redan's list. */
 export const STATION_DATA_IS_PLACEHOLDER =
@@ -44,23 +100,6 @@ export const STATIONS_HAVE_LOCATIONS = stations.some(
   (s) => typeof s.lat === "number" && typeof s.lng === "number",
 );
 
-/** Great-circle distance in km. */
-function haversineKm(
-  aLat: number,
-  aLng: number,
-  bLat: number,
-  bLng: number,
-): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
-
 export type StationQuery = {
   lat?: number;
   lng?: number;
@@ -69,57 +108,72 @@ export type StationQuery = {
   onlyOpen24h?: boolean;
 };
 
-/**
- * Returns every matching station: ranked by distance from a coordinate, or
- * filtered by place name when no coordinate is given. Filters are applied
- * before ranking so "nearest 3 with diesel" returns three stations that
- * actually have diesel. The caller decides how many to show.
- */
-/**
- * Stations matching a place or station name. Models often pass things like
- * "Redan Skyway, Harare" or "Skyway station", so filler words are dropped and,
- * failing a whole-phrase match, each comma/"in"-separated part is tried — a
- * station-name match first, so "Skyway, Harare" means Skyway, not all Harare.
- */
-function matchPlace(pool: Station[], place: string): Station[] {
-  const clean = (t: string) =>
-    t
-      .toLowerCase()
-      .replace(/\b(redan|service|station|site|garage)\b/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  const matches = (needle: string, fields: (s: Station) => string[]) =>
-    needle
-      ? pool.filter((s) => fields(s).some((f) => f.toLowerCase().includes(needle)))
-      : [];
-  const byName = (s: Station) => [s.name, ...(s.aliases ?? [])];
-  const byAny = (s: Station) => [s.city, s.address ?? "", ...byName(s)];
+export type StationSearch = {
+  stations: RankedStation[];
+  /** The Zimbabwean place the customer named, when it was found in the gazetteer. */
+  place?: ResolvedPlace;
+  /**
+   * True when Redan has no station in the place the customer named, so the
+   * stations are simply the nearest ones to it.
+   */
+  nearestOnly: boolean;
+};
 
-  const whole = clean(place);
-  const direct = matches(whole, byAny);
+const cleanName = (t: string) =>
+  t
+    .toLowerCase()
+    .replace(/\b(redan|service|station|site|garage)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const byName = (s: Station) => [s.name, ...(s.aliases ?? [])];
+const byAny = (s: Station) => [s.city, s.address ?? "", ...byName(s)];
+const splitParts = (place: string) =>
+  place.split(/,|\bin\b/i).map(cleanName).filter(Boolean);
+
+function matching(pool: Station[], needle: string, fields: (s: Station) => string[]) {
+  return needle
+    ? pool.filter((s) => fields(s).some((f) => f.toLowerCase().includes(needle)))
+    : [];
+}
+
+/**
+ * Stations whose own name is in the query. Models often pass things like
+ * "Redan Skyway, Harare" or "Skyway station", so filler words are dropped and
+ * each comma/"in"-separated part is tried, so "Skyway, Harare" means Skyway,
+ * not all of Harare. Single whole words count too ("Zindoga Waterfalls").
+ */
+function matchStationName(pool: Station[], place: string): Station[] {
+  const whole = cleanName(place);
+  const direct = matching(pool, whole, byName);
   if (direct.length > 0) return direct;
-
-  const parts = place.split(/,|\bin\b/i).map(clean).filter(Boolean);
-  for (const part of parts) {
-    const hit = matches(part, byName);
+  for (const part of splitParts(place)) {
+    const hit = matching(pool, part, byName);
     if (hit.length > 0) return hit;
   }
-  for (const part of parts) {
-    const hit = matches(part, byAny);
+  const words = whole.split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  return pool.filter((s) =>
+    byName(s).some((f) =>
+      cleanName(f)
+        .split(/[^a-z0-9]+/)
+        .some((t) => words.includes(t)),
+    ),
+  );
+}
+
+/** Stations in a town (or at an address) named in the query. */
+function matchTown(pool: Station[], place: string): Station[] {
+  const direct = matching(pool, cleanName(place), byAny);
+  if (direct.length > 0) return direct;
+  for (const part of splitParts(place)) {
+    const hit = matching(pool, part, byAny);
     if (hit.length > 0) return hit;
   }
+  return [];
+}
 
-  // Single words, for phrases with extra place names ("Zindoga Waterfalls").
-  // Station names before towns, so the station wins over a whole town.
-  const words = whole.split(" ").filter((w) => w.length >= 4);
-  for (const fields of [byName, byAny]) {
-    const hit = pool.filter((s) =>
-      fields(s).some((f) => words.some((w) => f.toLowerCase().includes(w))),
-    );
-    if (hit.length > 0) return hit;
-  }
-
-  // Last resort: tolerate a typo ("Zindonga") in a station or town name.
+/** A one- or two-letter typo in a station or town name ("Zindonga"). */
+function matchTypo(pool: Station[], place: string): Station[] {
+  const words = cleanName(place).split(" ").filter((w) => w.length >= 4);
   const close = (w: string, target: string) =>
     Math.abs(w.length - target.length) <= 2 &&
     editDistance(w, target) <= (w.length >= 7 ? 2 : 1);
@@ -132,23 +186,6 @@ function matchPlace(pool: Station[], place: string): Station[] {
     if (hit.length > 0) return hit;
   }
   return [];
-}
-
-/** Levenshtein distance: how many single-letter edits turn a into b. */
-function editDistance(a: string, b: string): number {
-  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j++) {
-      cur[j] = Math.min(
-        prev[j] + 1,
-        cur[j - 1] + 1,
-        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    prev = cur;
-  }
-  return prev[b.length];
 }
 
 /**
@@ -179,7 +216,18 @@ export function stationsMentionedIn(text: string): string[] {
   return [...found];
 }
 
-export function findStations(q: StationQuery): RankedStation[] {
+/**
+ * Returns every matching station, ranked by distance from the customer's
+ * coordinates or from the place they named. Filters are applied before
+ * ranking so "nearest 3 with diesel" returns three stations that actually
+ * have diesel. The caller decides how many to show.
+ *
+ * A place name is tried, in order, as: a station's name; a town with Redan
+ * stations (ranked from the suburb, if one was named too: "Highfield,
+ * Harare"); any other place in Zimbabwe, giving the nearest stations to it;
+ * a misspelt station or town; a misspelt place.
+ */
+export function findStations(q: StationQuery): StationSearch {
   const fuelType = q.fuelType ?? "any";
 
   let pool = stations;
@@ -191,44 +239,64 @@ export function findStations(q: StationQuery): RankedStation[] {
     pool = pool.filter((s) => s.hours === "24h");
   }
   const hasCoords = typeof q.lat === "number" && typeof q.lng === "number";
+  let origin = hasCoords ? { lat: q.lat!, lng: q.lng! } : null;
+  let place: ResolvedPlace | undefined;
+  let nearestOnly = false;
+  const located = (list: Station[]) => list.filter((s) => s.lat !== null && s.lng !== null);
 
   if (q.city) {
-    const byCity = matchPlace(pool, q.city);
+    const named = matchStationName(pool, q.city);
+    const town = named.length > 0 ? [] : matchTown(pool, q.city);
+    place =
+      named.length > 0 ? undefined : (resolvePlace(q.city, { fuzzy: false }) ?? undefined);
 
-    if (byCity.length > 0) {
-      pool = byCity;
-    } else if (!hasCoords) {
-      // Named a place we have no station in, and gave no coordinates to fall
-      // back on. Return nothing rather than a list of unrelated stations —
-      // handing the model arbitrary stations here is how a bot ends up quoting
-      // a Harare price for a town it does not serve.
-      return [];
+    if (named.length > 0) {
+      pool = named;
+    } else if (town.length > 0) {
+      pool = town;
+    } else if (place) {
+      pool = located(pool);
+      nearestOnly = true;
+    } else {
+      const typo = matchTypo(pool, q.city);
+      place = typo.length > 0 ? undefined : (resolvePlace(q.city) ?? undefined);
+      if (typo.length > 0) {
+        pool = typo;
+      } else if (place) {
+        pool = located(pool);
+        nearestOnly = true;
+      } else if (!hasCoords) {
+        // Not a station, town or any place we know, and no coordinates to
+        // fall back on. Return nothing rather than unrelated stations —
+        // handing the model arbitrary stations here is how a bot ends up
+        // quoting a Harare price for a town it does not serve.
+        return { stations: [], nearestOnly: false };
+      }
+      // With coordinates we can still rank the full pool by real distance, so
+      // an unrecognised place name is not fatal.
     }
-    // With coordinates we can still rank the full pool by real distance, so an
-    // unrecognised place name is not fatal.
-  }
-
-  if (hasCoords && !q.city) {
+    if (!origin && place) origin = place;
+  } else if (hasCoords) {
     // Only stations with a known location can be ranked by distance.
-    pool = pool.filter((s) => s.lat !== null && s.lng !== null);
+    pool = located(pool);
   }
 
   const ranked: RankedStation[] = pool.map((s) => ({
     ...s,
     distanceKm:
-      hasCoords && s.lat !== null && s.lng !== null
-        ? Number(haversineKm(q.lat!, q.lng!, s.lat, s.lng).toFixed(1))
+      origin && s.lat !== null && s.lng !== null
+        ? Number(haversineKm(origin.lat, origin.lng, s.lat, s.lng).toFixed(1))
         : -1,
   }));
 
-  if (hasCoords) {
+  if (origin) {
     // Stations without a location (-1) go last.
     ranked.sort((a, b) =>
       a.distanceKm < 0 ? 1 : b.distanceKm < 0 ? -1 : a.distanceKm - b.distanceKm,
     );
   }
 
-  return ranked;
+  return { stations: ranked, place, nearestOnly };
 }
 
 
@@ -255,7 +323,9 @@ function hoursLine(s: Station): string {
 
 /** A compact, model-friendly rendering of a station result. */
 export function formatStation(s: RankedStation): Record<string, unknown> {
-  const hasLocation = s.lat !== null && s.lng !== null;
+  // An approximate location is only the suburb or town centre, so the map
+  // link searches for the station by name instead of pinning that point.
+  const hasLocation = s.lat !== null && s.lng !== null && !s.locationApprox;
   return {
     name: s.name,
     town: s.city,
@@ -270,7 +340,11 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
         : "not listed",
     ...(s.manager && { site_manager: s.manager }),
     distance_km:
-      s.distanceKm >= 0 ? s.distanceKm : "unknown (no location for this station or customer)",
+      s.distanceKm < 0
+        ? "unknown (no location for this station or customer)"
+        : s.locationApprox
+          ? `about ${Math.max(1, Math.round(s.distanceKm))} km in a straight line (approximate: measured to the centre of the station's suburb or town)`
+          : s.distanceKm,
     // Seed data's hours are made up, so only real station lists report them.
     ...(STATION_DATA_IS_PLACEHOLDER ? {} : { operating_hours: hoursLine(s) }),
     blend: fuelLine(s.fuel.blend, "Petrol Blend: "),

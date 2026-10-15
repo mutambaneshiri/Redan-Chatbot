@@ -51,8 +51,10 @@ check("both shapes carry identical schemas",
   JSON.stringify(anth.map(t => t.input_schema)) === JSON.stringify(oai.map(t => t.function.parameters)));
 
 console.log("\n── Tool execution ──");
-const r1 = JSON.parse((await executeTool("find_nearest_stations", { lat: -17.8277, lng: 31.0534 })).result);
-check("coords without station locations → asks for town", r1.stations.length === 0 && /Ask the customer which town/.test(r1.note ?? ""));
+// A pin in Msasa, Harare.
+const r1 = JSON.parse((await executeTool("find_nearest_stations", { lat: -17.8406, lng: 31.1161 })).result);
+check("shared location ranks stations by distance", r1.stations[0]?.name === "Redan Msasa", r1.stations.map((s: any) => s.name).join(", "));
+check("shared location names the customer's area", /Msasa/.test(r1.customer_is_near ?? ""), r1.customer_is_near);
 
 const r2 = JSON.parse((await executeTool("find_nearest_stations", { city: "Harare", fuel_type: "diesel" })).result);
 check("diesel filter honoured", r2.stations.length > 0 && r2.stations.every((s: any) => s.diesel !== "not available"), r2.stations.map((s:any)=>s.name).join(", "));
@@ -69,9 +71,30 @@ check("city filter works", r3.stations.length > 0 && r3.stations.every((s: any) 
 check("price comes from the spreadsheet (Lobengula diesel $2.08)", r3.stations.some((s: any) => s.name === "Redan Lobengula" && s.diesel === "Diesel 50: $2.08/L"), r3.stations.map((s: any) => `${s.name} ${s.diesel}`).join("; "));
 
 const r4 = JSON.parse((await executeTool("find_nearest_stations", { city: "Victoria Falls" })).result);
-check("unknown city returns NO stations", r4.stations.length === 0, `returned ${r4.stations.length}`);
-check("unknown city returns a do-not-substitute note", /Do NOT quote prices/.test(r4.note ?? ""));
-check("unknown city note names the place", (r4.note ?? "").includes("Victoria Falls"));
+check("town without a station gives the nearest ones", r4.stations.length === 3 && r4.searched_place?.startsWith("Victoria Falls"), r4.stations.map((s: any) => s.name).join(", "));
+check("…and says there is no station there", /no station in Victoria Falls/.test(r4.note ?? "") && /Do NOT present them as being in Victoria Falls/.test(r4.note ?? ""));
+check("…and warns when the nearest is far", /over 100 km/.test(r4.note ?? ""));
+
+const r4b = JSON.parse((await executeTool("find_nearest_stations", { city: "Qwertyville" })).result);
+check("unknown place returns NO stations", r4b.stations.length === 0, `returned ${r4b.stations.length}`);
+check("unknown place returns a do-not-substitute note", /Do NOT quote prices/.test(r4b.note ?? "") && (r4b.note ?? "").includes("Qwertyville"));
+
+// Places with no Redan station, anywhere in the country: [place, expected nearest].
+for (const [place, nearest] of [
+  ["Borrowdale", "Redan Pomona"],
+  ["Mabvuku", "Redan Epworth"],
+  ["kuMabvuku", "Redan Epworth"],
+  ["Nkulumane", "Redan Belevue"],
+  ["Chiredzi", "Redan Triangle"],
+  ["Domboshava", "Redan Hatcliffe"],
+  ["Kuwadzan", "Redan Warren Hills"],
+]) {
+  const r = JSON.parse((await executeTool("find_nearest_stations", { city: place })).result);
+  check(`"${place}" → nearest is ${nearest}`, r.stations[0]?.name === nearest && /no station in/.test(r.note ?? ""), r.stations.map((s: any) => `${s.name} ${s.distance_km}`).join(", "));
+}
+const rh = JSON.parse((await executeTool("find_nearest_stations", { city: "Highfield, Harare" })).result);
+check("suburb + town ranks the town's stations from the suburb", rh.stations[0]?.name === "Redan Ardbennie" && rh.stations.every((s: any) => s.town === "Harare"), rh.stations.map((s: any) => s.name).join(", "));
+check("approximate distances are labelled", /approximate/.test(String(rh.stations[0]?.distance_km)));
 
 const r5 = JSON.parse((await executeTool("find_nearest_stations", { city: "Bellevue" })).result);
 check("alternative spelling finds the station", r5.stations.some((s: any) => s.name === "Redan Belevue"));
