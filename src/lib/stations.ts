@@ -1,5 +1,4 @@
 import stationData from "@/data/stations.json";
-import priceData from "@/data/prices.json";
 
 export type FuelInfo = { available: boolean; price: number | null };
 
@@ -26,43 +25,19 @@ export type Station = {
   lubricants: boolean;
   refreshments?: boolean;
   lpg?: boolean;
+  /** USD per kg, when the station list gives one. */
+  lpgPrice?: number | null;
 };
 
 export type RankedStation = Station & { distanceKm: number };
 
-// Towns listed in prices.json get its (ZERA) pump prices; elsewhere the price
-// comes from the station list, which currently has none.
-const pricedTowns = new Set(priceData.towns.map((t) => t.toLowerCase()));
+const stations = stationData.stations as Station[];
 
-const stations = (stationData.stations as Station[]).map((s) => {
-  if (!pricedTowns.has(s.city.trim().toLowerCase())) return s;
-  const set = (f: FuelInfo, price: number): FuelInfo =>
-    f.available ? { ...f, price } : f;
-  return {
-    ...s,
-    fuel: {
-      blend: set(s.fuel.blend, priceData.blendPerLitre),
-      diesel: set(s.fuel.diesel, priceData.dieselPerLitre),
-    },
-  };
-});
-
-/** "9 October 2026" from "2026-10-09". */
-const PRICE_DATE = new Date(`${priceData.effective}T00:00:00Z`).toLocaleDateString(
-  "en-GB",
-  { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" },
-);
-const PRICE_LABEL = `${priceData.source}, effective ${PRICE_DATE}`;
-
-function inPricedTown(s: Station): boolean {
-  return pricedTowns.has(s.city.trim().toLowerCase());
-}
 
 /** True when the seed file is still placeholder data rather than Redan's list. */
 export const STATION_DATA_IS_PLACEHOLDER =
   stationData._meta?.status === "PLACEHOLDER";
 
-export const PRICES_UPDATED_AT = priceData.effective;
 
 /** False until map locations have been added for the stations. */
 export const STATIONS_HAVE_LOCATIONS = stations.some(
@@ -183,7 +158,11 @@ function editDistance(a: string, b: string): number {
  * one-letter typo in single-word names of five letters or more.
  */
 export function stationsMentionedIn(text: string): string[] {
-  const lower = ` ${text.toLowerCase().replace(/[^a-z0-9\s]/g, " ")} `;
+  const plain = text.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+  // Shona and isiNdebele attach place prefixes to names: "kuZindoga",
+  // "kwaMbare", "paSkyway", "eLobengula". Match with and without them.
+  const unprefixed = plain.replace(/\b(kwa|ku|ko|pa|e)(?=[a-z]{4,})/g, "");
+  const lower = ` ${plain} ${unprefixed} `;
   const words = lower.split(/\s+/).filter((w) => w.length >= 5);
   const found = new Set<string>();
   for (const s of stations) {
@@ -252,22 +231,19 @@ export function findStations(q: StationQuery): RankedStation[] {
   return ranked;
 }
 
-/** From ZERA's price list, which names the petrol "Petrol Blend (E20)". */
-export const BLEND_RATIO =
-  "E20: 20% ethanol, 80% unleaded petrol (ZERA's current blending ratio)";
 
 function fuelLine(f: FuelInfo, label = ""): string {
   if (!f.available) return "not available";
   return f.price !== null
-    ? `${label}$${f.price.toFixed(2)}/L — ${PRICE_LABEL}`
+    ? `${label}$${f.price.toFixed(2)}/L`
     : `${label}available (pump price not listed — give ZERA's published price from the knowledge base with its date, and say to confirm at the station)`;
 }
 
 function lpgLine(s: Station): string {
   if (!s.lpg) return "no";
-  return inPricedTown(s)
-    ? `yes, $${priceData.lpgPerKg.toFixed(2)}/kg (${PRICE_LABEL})`
-    : "yes";
+  return typeof s.lpgPrice === "number"
+    ? `yes, $${s.lpgPrice.toFixed(2)}/kg`
+    : "yes (LPG price not listed — tell the customer to confirm it at the station)";
 }
 
 function hoursLine(s: Station): string {
@@ -283,26 +259,30 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
   return {
     name: s.name,
     town: s.city,
-    address: s.address ?? "not listed",
+    // Missing fields are left out so the model doesn't list "not listed" lines.
+    ...(s.address
+      ? { address: s.address }
+      : { location: `No street address on file — give the town (${s.city}) and the map link.` }),
     phone: s.phone
       ? `${s.phone} (site cell number)`
       : s.landline
         ? `${s.landline} (landline — this site has no cell number)`
         : "not listed",
-    site_manager: s.manager ?? "not listed",
+    ...(s.manager && { site_manager: s.manager }),
     distance_km:
       s.distanceKm >= 0 ? s.distanceKm : "unknown (no location for this station or customer)",
     // Seed data's hours are made up, so only real station lists report them.
     ...(STATION_DATA_IS_PLACEHOLDER ? {} : { operating_hours: hoursLine(s) }),
-    blend: fuelLine(s.fuel.blend, "Blend E20 (20% ethanol, 80% petrol): "),
-    ...(s.fuel.blend.available && { blend_ratio: BLEND_RATIO }),
-    diesel: fuelLine(s.fuel.diesel),
+    blend: fuelLine(s.fuel.blend, "Petrol Blend: "),
+    diesel: fuelLine(s.fuel.diesel, "Diesel 50: "),
     lubricants: s.lubricants ? "yes" : "no",
     ...(s.refreshments !== undefined && { refreshments: s.refreshments ? "yes" : "no" }),
     ...(s.lpg !== undefined && { lpg_gas: lpgLine(s) }),
     maps_link: hasLocation
       ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`
       : (s.mapsLink ??
-        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${s.name} ${s.city} Zimbabwe`)}`),
+        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name} ${s.city} Zimbabwe`,
+        )}`),
   };
 }

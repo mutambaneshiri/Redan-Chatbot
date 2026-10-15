@@ -12,11 +12,12 @@ import { stationsMentionedIn } from "./stations";
 // Words that are distinctive to each language. Common short words shared by
 // both, or with English, are left out on purpose.
 const SHONA = new Set([
-  "mhoro", "mhoroi", "makadii", "makadini", "ndoda", "ndinoda", "ndingawana",
+  "mhoro", "mhoroi", "hevoi", "makadii", "makadini", "ndoda", "ndinoda", "ndingawana",
   "ndingawanepi", "kupi", "hongu", "ndatenda", "ndinotenda", "ndoita", "sei",
   "yangu", "wangu", "nezve", "zvakadii", "ndiri", "ndapota", "ndokumbirawo",
   "ndibatsirei", "ndiudzei", "riini", "chii", "mangwanani", "masikati",
-  "manheru", "ndingaite", "zvino", "kuziva",
+  "manheru", "ndingaite", "zvino", "kuziva", "dhiziri", "peturu", "mafuta",
+  "makobvu", "mukobvu", "matete", "mutete",
 ]);
 const NDEBELE = new Set([
   "salibonani", "sawubona", "lotjhani", "linjani", "unjani", "ngicela",
@@ -24,6 +25,50 @@ const NDEBELE = new Set([
   "ngiyabonga", "ukwazi", "kanjani", "ngisize", "ngitshele", "nini", "yami",
   "wami", "khona", "kuphi", "ngingenzani", "ngiyafuna",
 ]);
+
+// Complaint words in Shona and isiNdebele, which small models misread (e.g.
+// "yarambwa", refused, taken as "expired").
+const COMPLAINT = new Set([
+  // Shona
+  "yarambwa", "rambwa", "rakarambwa", "yakarambwa", "kunyunyuta", "ndinonyunyuta",
+  "dambudziko", "ndabirwa", "kubirwa", "mashoma", "yakaipa", "yakashata",
+  // isiNdebele
+  "yaliwa", "kwaliwa", "ukukhalaza", "ngiyakhalaza", "inkinga", "ngebiwe",
+  "amancane", "kubi",
+]);
+
+// English complaint words. The model usually spots English complaints, but
+// tends to drop the "call the station" step once the station is named.
+const COMPLAINT_EN = new Set([
+  "complain", "complaint", "complaining", "contaminated", "contamination",
+  "dirty", "refused", "rejected", "declined", "rude", "overcharged", "cheated",
+  "stolen", "theft", "misfiring", "damaged", "broke", "shortchanged",
+]);
+
+/** True when a message reports a problem, in Shona, isiNdebele or English. */
+export function isComplaint(text: string): boolean {
+  return (text.toLowerCase().match(/[a-z]+/g) ?? []).some(
+    (w) => COMPLAINT.has(w) || COMPLAINT_EN.has(w),
+  );
+}
+
+const PRODUCT = /\b(coupons?|vouchers?|fuel ?cards?|cards?|top ?-?ups?|topping up|load(ing)?|redanflexi|flexi)\b/i;
+const PRICE = /\b(price|prices|cost|costs|how much|rate|marii|imarii|malini|yimalini)\b/i;
+
+/** True when the customer asks what coupons / card or Flexi top-ups cost. */
+export function isPurchasePriceQuestion(text: string): boolean {
+  return PRODUCT.test(text) && PRICE.test(text);
+}
+
+/** "petrol" or "diesel" when a price question names just one of the two. */
+export function singleFuelAsked(text: string): "petrol" | "diesel" | null {
+  if (!PRICE.test(text)) return null;
+  const petrol = /\b(petrol|blend|e20|unleaded|peturu|matete|mutete)\b/i.test(text);
+  const diesel = /\b(diesel|d50|dhiziri|makobvu|mukobvu)\b/i.test(text);
+  if (petrol && !diesel) return "petrol";
+  if (diesel && !petrol) return "diesel";
+  return null;
+}
 
 export type Language = "shona" | "ndebele" | "english";
 
@@ -42,8 +87,16 @@ export function detectLanguage(text: string): Language {
 
 const FULL_LOCAL_LANGUAGE = process.env.REPLY_LANGUAGE_MODE === "full";
 
-function languageNote(lang: Language): string | null {
-  if (lang === "english") return null;
+function languageNote(lang: Language, text: string): string | null {
+  if (lang === "english") {
+    // A bare station name ("Zindoga") says nothing about language; a real
+    // English sentence does, and small models sometimes greet it in Shona or
+    // isiNdebele anyway.
+    const words = text.trim().split(/\s+/).length;
+    return words >= 3
+      ? "The customer wrote in English. Reply only in English — no Shona or isiNdebele greetings or sign-offs."
+      : null;
+  }
   const [name, hello] =
     lang === "shona" ? ["Shona", "Mhoroi"] : ["isiNdebele", "Salibonani"];
   return FULL_LOCAL_LANGUAGE
@@ -60,14 +113,40 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
   if (!last || last.role !== "user") return history;
 
   const notes: string[] = [];
-  const lang = languageNote(detectLanguage(last.content));
+  const lang = languageNote(detectLanguage(last.content), last.content);
   if (lang) notes.push(lang);
 
   const named = stationsMentionedIn(last.content);
-  if (named.length > 0) {
+  const complaintNow = isComplaint(last.content);
+  // The customer is answering our "which station?" question about a
+  // complaint they made earlier in the conversation.
+  const prevAssistant = [...history].reverse().find((t) => t.role === "assistant");
+  const askedForStation = !!prevAssistant && /which\b.*\bstation/i.test(prevAssistant.content);
+  const earlierComplaint = history.slice(0, -1).some((t) => t.role === "user" && isComplaint(t.content));
+  const inComplaint = complaintNow || (askedForStation && earlierComplaint);
+
+  if (isPurchasePriceQuestion(last.content) && !complaintNow) {
+    notes.push(
+      "This asks the price of coupons, a fuel card top-up or a RedanFlexi top-up. Use ZERA's published price per litre from the knowledge base, in USD, and do not mention any date. Never use a station's pump price, and do not call find_nearest_stations.",
+    );
+  } else if (inComplaint && named.length > 0) {
+    notes.push(
+      `This is a complaint about Redan ${named[0]} (e.g. refused coupon or card, too little fuel, contaminated fuel, bad service). In this reply: 1) call find_nearest_stations with city "${named[0]}" and give its details (site cell number, site manager if listed, hours); 2) tell the customer to call Redan ${named[0]} on that site cell number — the station will guide them on dealing with the problem. Do NOT call escalate_to_human and do not give the support team's contacts.`,
+    );
+  } else if (complaintNow) {
+    notes.push(
+      "This is a complaint or problem report (e.g. refused coupon or card, too little fuel, contaminated fuel, bad service) — not a question about expiry. Acknowledge it and ask which Redan station it happened at. Do not call escalate_to_human.",
+    );
+  } else if (named.length > 0) {
     notes.push(
       `This message names ${named.map((n) => `Redan ${n}`).join(", ")}. Call find_nearest_stations with city "${named[0]}" before answering.`,
     );
+    const only = singleFuelAsked(last.content);
+    if (only) {
+      notes.push(
+        `The customer asked only for the ${only} price: give only the ${only === "petrol" ? "petrol" : "Diesel 50"} line, not the ${only === "petrol" ? "diesel" : "petrol"} price or any other detail.`,
+      );
+    }
   }
 
   if (notes.length === 0) return history;

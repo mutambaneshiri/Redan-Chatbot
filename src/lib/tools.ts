@@ -1,7 +1,6 @@
 import {
   findStations,
   formatStation,
-  PRICES_UPDATED_AT,
   STATION_DATA_IS_PLACEHOLDER,
   STATIONS_HAVE_LOCATIONS,
 } from "./stations";
@@ -67,7 +66,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: "escalate_to_human",
     description:
-      "Hand the conversation to a human agent. Call this for complaints, refunds, fraud or account disputes, bulk enquiries of 5,000L or more, anything you cannot ground in the knowledge base, or whenever the customer asks for a person.",
+      "Hand the conversation to a human agent. Do NOT call this for complaints or problems at a station — those go to the station itself (give its site cell number). Call this for problems not linked to a station (e.g. a RedanFlexi in-app payment), refunds, fraud or account disputes, bulk enquiries of 5,000L or more, anything you cannot ground in the knowledge base, or whenever the customer asks for a person.",
     parameters: {
       type: "object",
       properties: {
@@ -190,7 +189,6 @@ export async function executeTool(
           ...(matches.length > limit && {
             note: `Showing ${limit} of ${matches.length} matching stations. Ask the customer for their suburb or a nearby landmark to narrow it down.`,
           }),
-          prices_updated_at: PRICES_UPDATED_AT,
           data_status: STATION_DATA_IS_PLACEHOLDER
             ? "SEED DATA — tell the customer prices are indicative and to confirm at the station"
             : "live",
@@ -212,7 +210,7 @@ export async function executeTool(
         result: JSON.stringify({
           escalated: true,
           tell_customer:
-            "Give the customer the three support channels and let them know a human can take it from here.",
+            "If you looked up a station for this complaint, first give that station's details exactly as the station tool returned them (name, site cell number, site manager if listed, hours). Then say the support team will follow up, and give the three support channels.",
           channels: SUPPORT_CHANNELS,
         }),
         escalation: ticket,

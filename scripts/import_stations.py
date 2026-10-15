@@ -2,19 +2,26 @@
 Convert Redan's station spreadsheet into src/data/stations.json.
 
     npm run import:stations
-    python scripts/import_stations.py ["path/to/Station Details.xlsx"] [output.json]
+    python scripts/import_stations.py ["path/to/station file.xlsx"] [output.json]
 
-Default input: data-sources/Station Details.xlsx
+Default input: the most recently saved .xlsx file in data-sources/ (so a
+renamed copy such as "Station Details1.xlsx" is picked up automatically).
 
 Uses only the Python standard library (an .xlsx file is a zip of XML), so
 there is nothing to pip install.
 
 Columns are found by their header text, so their order does not matter.
 Required: STATION NAME, TOWN, OPERATING HOURS, CONTACT, PRODUCTS.
-Optional, picked up automatically when added later:
+Optional, picked up automatically when present:
+  DIESEL 50 PRICE / DIESEL PRICE, BLEND PRICE / PETROL PRICE, LPG PRICE
+    (USD; the prices the bot quotes — the file's save date is shown as the
+    "updated" date),
   SITE MANAGER, LANDLINE (used only when a station has no cell number),
   ADDRESS, LATITUDE, LONGITUDE, MAPS LINK (a Google Maps link),
   OPEN FROM / OPEN TO (e.g. 06:00 / 18:00, for 12-hour stations).
+
+Stations with no ADDRESS fall back to data-sources/website-addresses.json
+(addresses published on redan.co.zw).
 """
 
 import json
@@ -26,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_INPUT = ROOT / "data-sources" / "Station Details.xlsx"
+SOURCES = ROOT / "data-sources"
 OUTPUT = ROOT / "src" / "data" / "stations.json"
 
 NS = {
@@ -118,10 +125,20 @@ def slug(text: str) -> str:
 
 
 def main() -> None:
-    src = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_INPUT
+    if len(sys.argv) > 1:
+        src = Path(sys.argv[1])
+    else:
+        found = sorted(
+            (f for f in SOURCES.glob("*.xlsx") if not f.name.startswith("~$")),
+            key=lambda f: f.stat().st_mtime,
+        )
+        if not found:
+            sys.exit(f"No .xlsx station file found in {SOURCES}")
+        src = found[-1]
     output = Path(sys.argv[2]) if len(sys.argv) > 2 else OUTPUT
     if not src.exists():
         sys.exit(f"Station file not found: {src}")
+    print(f"Reading {src.name}")
 
     rows = read_first_sheet(src)
     header_at = next(
@@ -153,6 +170,25 @@ def main() -> None:
     c_link = col("MAPS LINK", "GOOGLE MAPS", "LOCATION")
     c_from = col("OPEN FROM")
     c_to = col("OPEN TO")
+    c_diesel_price = col("DIESEL 50 PRICE", "DIESEL PRICE", "D50 PRICE")
+    c_blend_price = col("BLEND PRICE", "PETROL PRICE", "E20 PRICE")
+    c_lpg_price = col("LPG PRICE", "GAS PRICE")
+
+    def price(r: list[str], i: int | None, name: str, label: str) -> float | None:
+        if i is None:
+            return None
+        raw = cell(r, i).replace("$", "").strip()
+        if not raw:
+            warnings.append(f"{name}: no {label}")
+            return None
+        try:
+            value = round(float(raw), 2)
+        except ValueError:
+            warnings.append(f"{name}: {label} '{raw}' is not a number")
+            return None
+        if not 0.5 <= value <= 5:
+            warnings.append(f"{name}: {label} ${value} looks wrong")
+        return value
     missing = [n for n, c in [("STATION NAME", c_name), ("TOWN", c_town),
                ("OPERATING HOURS", c_hours), ("CONTACT", c_phone),
                ("PRODUCTS", c_products)] if c is None]
@@ -161,6 +197,13 @@ def main() -> None:
 
     def cell(r: list[str], i: int | None) -> str:
         return r[i].strip() if i is not None and i < len(r) else ""
+
+    web_file = SOURCES / "website-addresses.json"
+    web_addresses = {
+        k.lower(): v
+        for k, v in (json.loads(web_file.read_text(encoding="utf-8")) if web_file.exists() else {}).items()
+        if not k.startswith("_")
+    }
 
     stations, warnings, seen_ids = [], [], set()
     for r in rows[header_at + 1:]:
@@ -204,7 +247,7 @@ def main() -> None:
             "name": display,
             "aliases": ALIASES.get(name, []),
             "city": town,
-            "address": cell(r, c_address) or None,
+            "address": cell(r, c_address) or web_addresses.get(name.lower()),
             # The site's cell number is the contact; a landline is kept only
             # as a fallback for stations with no cell number.
             "phone": cell_no,
@@ -217,12 +260,15 @@ def main() -> None:
             "openFrom": open_from,
             "openTo": open_to,
             "fuel": {
-                "blend": {"available": "petrol" in products, "price": None},
-                "diesel": {"available": "diesel" in products, "price": None},
+                "blend": {"available": "petrol" in products,
+                          "price": price(r, c_blend_price, name, "blend price")},
+                "diesel": {"available": "diesel" in products,
+                           "price": price(r, c_diesel_price, name, "diesel price")},
             },
             "lubricants": "lubricants" in products,
             "refreshments": "refreshments" in products,
             "lpg": "gas" in products or "lpg" in products,
+            "lpgPrice": price(r, c_lpg_price, name, "LPG price"),
         })
 
     phones: dict[str, list[str]] = {}
@@ -241,7 +287,9 @@ def main() -> None:
             "source": src.name,
             "importedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "pricesCurrency": "USD per litre",
-            "pricesUpdatedAt": None,
+            # The spreadsheet has no price date, so use the day it was saved.
+            "pricesUpdatedAt": datetime.fromtimestamp(src.stat().st_mtime).strftime("%Y-%m-%d")
+            if c_diesel_price is not None or c_blend_price is not None else None,
             "notes": "Generated by scripts/import_stations.py. Edit the spreadsheet and re-run; do not hand-edit.",
         },
         "stations": stations,
