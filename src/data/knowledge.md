@@ -45,7 +45,17 @@
   so answer 20L for diesel and offer to confirm with a human if the customer
   specifically asks about a 5L diesel coupon.
 - Validity: 6 months from issue.
-- Expired coupons: can be returned to Redan Head Office and revalidated.
+- Expired coupons (any expiry date other than June 2026): can be returned to
+  Redan Head Office and revalidated. Revalidation is done at Head Office
+  only — never tell a customer a station can revalidate a coupon.
+- Coupons with an expiry date of June 2026 (this rule is ONLY for June 2026):
+  give the customer TWO options, as a numbered list:
+  1. Go to Redan Head Office (2 Northridge Close, Northridge Park,
+     Borrowdale, Harare; Monday to Friday, 8 a.m. to 5 p.m.).
+  2. Visit any nearby Redan service station and ask the attendant to do a
+     coupon inquiry on the system.
+  Then offer to find their nearest station if they tell you their town or
+  suburb. Don't say the station will revalidate the coupons.
 - Product conversion (e.g. Blend -> Diesel): must be done at Head Office. A Blend
   coupon cannot be redeemed for diesel until it has been converted.
 - Redeemable at: Redan service stations nationwide.
@@ -244,7 +254,7 @@ secure channel and never ask them for a PIN, password or full card number:
 - Station addresses (from the Redan website):
   - Skyway: 16944 Cnr Airport Road & Dieppe, Harare Main Sorting Office roundabout.
   - Norton: 20365 CIPF Norton Shopping Mall, Norton.
-  - Seventh Street: 159 Samora Machel Ave, Harare.
+  - Seventh Street: corner of Seventh Street and Jason Moyo Avenue, Harare.
   - Westgate: Westgate Complex, along Lomagundi Road after the roundabout.
   - Mazowe Mall: 124 Mazowe Walk, Mazowe (past Mazowe Dam, Bindura Road).
   - Triangle: Cnr Tanganda Ngundu & Hockey Roads, Triangle.

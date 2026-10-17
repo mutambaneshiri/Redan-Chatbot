@@ -32,6 +32,8 @@ export type Station = {
   /** For approximate locations: placed at its suburb, or only at its town centre. */
   locationLevel?: "suburb" | "town";
   mapsLink?: string | null;
+  /** Send map/directions links to the address, not the coordinates. */
+  routeByAddress?: boolean;
   hours: "24h" | "12h";
   openFrom?: string | null;
   openTo?: string | null;
@@ -386,6 +388,8 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
   // An approximate location is only the suburb or town centre, so the map
   // link searches for the station by name instead of pinning that point.
   const hasLocation = s.lat !== null && s.lng !== null && !s.locationApprox;
+  // Pin links to the coordinates only when they are exact and trusted for routing.
+  const pinByCoords = hasLocation && !(s.routeByAddress && s.address);
   return {
     name: s.name,
     town: s.city,
@@ -416,11 +420,20 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
     lubricants: s.lubricants ? "yes" : "no",
     ...(s.refreshments !== undefined && { refreshments: s.refreshments ? "yes" : "no" }),
     ...(s.lpg !== undefined && { lpg_gas: lpgLine(s) }),
-    maps_link: hasLocation
+    maps_link: pinByCoords
       ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`
       : (s.mapsLink ??
         `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
           s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name} ${s.city} Zimbabwe`,
         )}`),
+    // Turn-by-turn directions. With no origin, Google Maps starts from the
+    // customer's current location on their phone.
+    directions_link: `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${
+      pinByCoords
+        ? `${s.lat},${s.lng}`
+        : encodeURIComponent(
+            s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name}, ${s.city}, Zimbabwe`,
+          )
+    }`,
   };
 }

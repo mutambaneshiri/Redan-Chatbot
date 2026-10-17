@@ -302,6 +302,7 @@ def main() -> None:
             "aliases": ALIASES.get(name, []),
             "city": town,
             "address": cell(r, c_address) or known.get("address") or web_addresses.get(name.lower()),
+            "routeByAddress": bool(known.get("route_by_address")),
             # The site's cell number is the contact; a landline is kept only
             # as a fallback for stations with no cell number.
             "phone": cell_no,

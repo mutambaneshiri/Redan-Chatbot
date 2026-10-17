@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { accountMethodChosen, detectLanguage, isComplaint, isPurchasePriceQuestion, singleFuelAsked, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -172,6 +172,13 @@ const choiceHint = withMessageHints([
   { role: "user", content: "At a station" },
 ]);
 check("'At a station' after the account choice is not a station search", /AT A SERVICE STATION/.test(choiceHint[2].content) && /Do NOT call find_nearest_stations yet/.test(choiceHint[2].content));
+check("'Direct me there' is a directions request", wantsDirections("Direct me there from where I am") && wantsDirections("How do I get there?"));
+check("'there' = top station of the last list (Zindoga, not alphabetical Ardbennie)", lastStationDiscussed([{ role: "assistant", content: "Nearest to Glen Norah:\n- **Redan Zindoga** — about 2.7 km\n- **Redan Derbyshire** — 5 km\n- **Redan Ardbennie** — 7 km" }]) === "Zindoga");
+const rdl = JSON.parse((await executeTool("find_nearest_stations", { city: "Glenara" })).result);
+check("stations carry a Google Maps directions link", /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&travelmode=driving&destination=-17\.82/.test(rdl.stations[0]?.directions_link ?? ""), rdl.stations[0]?.directions_link);
+const r7 = JSON.parse((await executeTool("find_nearest_stations", { city: "Seventh Street" })).result);
+check("Seventh Street directions go to Jason Moyo by address", /destination=Redan%20Seventh%20Street%2C%20Cnr%20Seventh%20Street%20%26%20Jason%20Moyo%20Avenue/.test(r7.stations[0]?.directions_link ?? ""), r7.stations[0]?.directions_link);
+check("June 2026 coupons spotted", isJune2026CouponQuestion("My coupons were supposed to expire in June 2026") && isJune2026CouponQuestion("coupon expiry 06/2026") && !isJune2026CouponQuestion("My coupon expired last month"));
 check("bare word gets no note", withMessageHints([{ role: "user", content: "FlexiBucks" }])[0].content === "FlexiBucks");
 
 const esc = await executeTool("escalate_to_human", { reason: "bulk", summary: "Wants 20,000L/month." });

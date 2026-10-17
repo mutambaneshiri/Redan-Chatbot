@@ -96,6 +96,43 @@ const ACCOUNT_CHOICE_NOTES: Record<AccountMethod, string> = {
     "The customer chose to open the account AT HEAD OFFICE (option 3). Give the Head Office address and hours (Monday to Friday, 8 a.m. to 5 p.m.) and list the four requirements. Do not call find_nearest_stations.",
 };
 
+// Requests for directions, in English, Shona and isiNdebele.
+const DIRECTIONS =
+  /\b(direct me|directions?|take me|get there|get to|how do i get|navigate|navigation|route|guide me|show me the way|nzira|ndiendese|ndiratidze|ndiperekedze|indlela|ngikhombise)\b/i;
+
+export function wantsDirections(text: string): boolean {
+  return DIRECTIONS.test(text);
+}
+
+/**
+ * The station the conversation was last about: in the newest message that
+ * names any, the one named first (the top of a "nearest stations" list).
+ */
+export function lastStationDiscussed(history: ChatTurn[]): string | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const text = history[i].content.toLowerCase();
+    const found = stationsMentionedIn(history[i].content);
+    if (found.length === 0) continue;
+    const at = (name: string) => {
+      const k = text.indexOf(name.toLowerCase());
+      return k < 0 ? Infinity : k;
+    };
+    return [...found].sort((x, y) => at(x) - at(y))[0];
+  }
+  return null;
+}
+
+/** A question about coupons whose expiry date is June 2026. */
+export function isJune2026CouponQuestion(text: string): boolean {
+  const t = text.toLowerCase();
+  const coupon = /coupon|voucher|makuponi|macoupon/.test(t);
+  const june2026 =
+    /(june|jun|chikumi|nhlangulana)[^0-9]{0,6}(20)?26/.test(t) ||
+    /\b0?6\s*[\/.-]\s*(20)?26\b/.test(t) ||
+    /20?26\s*[\/.-]\s*0?6\b/.test(t);
+  return coupon && june2026;
+}
+
 export type Language = "shona" | "ndebele" | "english";
 
 /** Best guess at the language of one message, from distinctive words. */
@@ -155,7 +192,19 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
     ? accountMethodChosen(last.content)
     : null;
 
-  if (accountChoice) {
+  const directionsTo = wantsDirections(last.content)
+    ? (named[0] ?? lastStationDiscussed(history.slice(0, -1)))
+    : null;
+
+  if (isJune2026CouponQuestion(last.content)) {
+    notes.push(
+      "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
+    );
+  } else if (directionsTo) {
+    notes.push(
+      `The customer wants directions to Redan ${directionsTo}${named.length ? "" : " (the station from earlier in this conversation)"}. Call find_nearest_stations with city "${directionsTo}" and reply with the station name and its directions_link as "[Get directions](link)" — it opens Google Maps from where the customer is. Don't write turn-by-turn directions yourself.`,
+    );
+  } else if (accountChoice) {
     notes.push(ACCOUNT_CHOICE_NOTES[accountChoice]);
   } else if (isPurchasePriceQuestion(last.content) && !complaintNow) {
     notes.push(

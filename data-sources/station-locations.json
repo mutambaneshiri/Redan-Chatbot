@@ -1,5 +1,5 @@
 {
-  "_note": "Map positions for stations, used only when the station spreadsheet has no LATITUDE/LONGITUDE for them. Keys are station names as in the spreadsheet. Record where each position came from; replace with a pin from the site when available.",
+  "_note": "Map positions for stations, used only when the station spreadsheet has no LATITUDE/LONGITUDE for them. Keys are station names as in the spreadsheet. Record where each position came from; replace with a pin from the site when available. Set \"route_by_address\": true to send map and directions links to the address instead of the coordinates (for when the coordinates route to the wrong road).",
   "Zindoga": {
     "lat": -17.9053454,
     "lng": 30.9984641,
@@ -38,5 +38,10 @@
       "osm": "fuel station 'Redan', Harare-Beitbridge Road, Mvuma",
       "why": "No Mvuma station in the spreadsheet: a missing station, a closed one, or a mislabelled OSM entry."
     }
+  },
+  "Seventh Street": {
+    "address": "Cnr Seventh Street & Jason Moyo Avenue, Harare",
+    "route_by_address": true,
+    "source": "Redan, 2026-10-17: directions to the spreadsheet coordinates did not reach the station on Jason Moyo Avenue. Replace with a forecourt pin to confirm."
   }
 }
