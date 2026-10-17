@@ -8,6 +8,8 @@
 ## 1. Company contact & escalation
 
 - Head Office: 2 Northridge Close, Northridge Park, Borrowdale, Harare.
+  For directions to Head Office, use the get_directions tool (to: "Head
+  Office"); it routes to Northridge Close on the map.
 - Customer support (RedanFlexi): available 24/7 via the in-app online chat.
 - Email: customersupport@redan.co.zw
 - Phone: 08677 009583

@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { accountMethodChosen, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -29,7 +29,7 @@ check("enterprise portal url", SYSTEM_PROMPT.includes("https://flexienterprise.r
 check("no unresolved template literal", !SYSTEM_PROMPT.includes("${"));
 
 console.log("\n── Tool schemas ──");
-check("two tools defined", TOOL_SPECS.length === 2, TOOL_SPECS.map((t: ToolSpec) => t.name).join(", "));
+check("three tools defined", TOOL_SPECS.length === 3, TOOL_SPECS.map((t: ToolSpec) => t.name).join(", "));
 for (const t of TOOL_SPECS) {
   const s: any = t.parameters;
   check(`${t.name}: schema is an object`, s.type === "object");
@@ -179,6 +179,14 @@ check("stations carry a Google Maps directions link", /^https:\/\/www\.google\.c
 const r7 = JSON.parse((await executeTool("find_nearest_stations", { city: "Seventh Street" })).result);
 check("Seventh Street directions go to Jason Moyo by address", /destination=Redan%20Seventh%20Street%2C%20Cnr%20Seventh%20Street%20%26%20Jason%20Moyo%20Avenue/.test(r7.stations[0]?.directions_link ?? ""), r7.stations[0]?.directions_link);
 check("June 2026 coupons spotted", isJune2026CouponQuestion("My coupons were supposed to expire in June 2026") && isJune2026CouponQuestion("coupon expiry 06/2026") && !isJune2026CouponQuestion("My coupon expired last month"));
+const rf = routeIn("Give me directions from Redan Glenara to Redan Head Office");
+check("'from Glenara to Head Office' parsed", rf.from === "Glenara" && rf.to === "Head Office", JSON.stringify(rf));
+const gd = JSON.parse((await executeTool("get_directions", { to: "Head Office", from: "Redan Glenara" })).result);
+check("Glenara -> Head Office link starts at Glenara and ends at Northridge Close", /destination=-17\.778\d*%2C31\.0919/.test(gd.directions_link ?? "") && /origin=-17\.8233\d*%2C31\.0926/.test(gd.directions_link ?? ""), gd.directions_link);
+const gh = JSON.parse((await executeTool("get_directions", { to: "Head Office" })).result);
+check("directions with no 'from' start at the customer's location", !/origin=/.test(gh.directions_link ?? "") && /destination=/.test(gh.directions_link ?? ""), gh.directions_link);
+const gx = JSON.parse((await executeTool("get_directions", { to: "Atlantis" })).result);
+check("unknown destination returns an error, not a link", typeof gx.error === "string" && !gx.directions_link);
 check("bare word gets no note", withMessageHints([{ role: "user", content: "FlexiBucks" }])[0].content === "FlexiBucks");
 
 const esc = await executeTool("escalate_to_human", { reason: "bulk", summary: "Wants 20,000L/month." });

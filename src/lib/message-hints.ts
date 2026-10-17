@@ -104,6 +104,30 @@ export function wantsDirections(text: string): boolean {
   return DIRECTIONS.test(text);
 }
 
+const HEAD_OFFICE_RE = /\b(head ?office|hq|headquarters|main office)\b/i;
+
+/**
+ * Destination and optional starting point named in a directions request:
+ * "from Redan Glenara to Head Office", "take me to Westgate", "direct me
+ * there" (no destination: use the conversation).
+ */
+export function routeIn(text: string): { to: string | null; from: string | null } {
+  const pick = (part: string): string | null => {
+    if (HEAD_OFFICE_RE.test(part)) return "Head Office";
+    const st = stationsMentionedIn(part);
+    if (st.length) return st[0];
+    const m = part.match(/\b(?:to|from)\s+(.+)/i);
+    if (!m || /^(there|here|me|it|that|where i am|my (current )?location)\b/i.test(m[1].trim())) return null;
+    return m[1].replace(/[?.!]+$/, "").trim();
+  };
+  const fromTo = text.match(/\bfrom\s+(.+?)\s+to\s+(.+)/i);
+  if (fromTo) return { from: pick(`from ${fromTo[1]}`), to: pick(`to ${fromTo[2]}`) };
+  const toFrom = text.match(/\bto\s+(.+?)\s+from\s+(.+)/i);
+  if (toFrom) return { from: pick(`from ${toFrom[2]}`), to: pick(`to ${toFrom[1]}`) };
+  const to = HEAD_OFFICE_RE.test(text) ? "Head Office" : (stationsMentionedIn(text)[0] ?? null);
+  return { from: null, to };
+}
+
 /**
  * The station the conversation was last about: in the newest message that
  * names any, the one named first (the top of a "nearest stations" list).
@@ -192,8 +216,9 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
     ? accountMethodChosen(last.content)
     : null;
 
-  const directionsTo = wantsDirections(last.content)
-    ? (named[0] ?? lastStationDiscussed(history.slice(0, -1)))
+  const route = wantsDirections(last.content) ? routeIn(last.content) : null;
+  const directionsTo = route
+    ? (route.to ?? lastStationDiscussed(history.slice(0, -1)))
     : null;
 
   if (isJune2026CouponQuestion(last.content)) {
@@ -201,8 +226,11 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
       "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
     );
   } else if (directionsTo) {
+    const fromPart = route?.from
+      ? `, starting from "${route.from}"`
+      : " (no starting point given: leave 'from' empty so it starts at the customer's current location)";
     notes.push(
-      `The customer wants directions to Redan ${directionsTo}${named.length ? "" : " (the station from earlier in this conversation)"}. Call find_nearest_stations with city "${directionsTo}" and reply with the station name and its directions_link as "[Get directions](link)" — it opens Google Maps from where the customer is. Don't write turn-by-turn directions yourself.`,
+      `The customer wants directions to "${directionsTo}"${route?.to ? "" : " (from earlier in this conversation)"}${fromPart}. Call get_directions with to "${directionsTo}"${route?.from ? ` and from "${route.from}"` : ""}, then give its link as "[Get directions](link)". Never build a maps link yourself.`,
     );
   } else if (accountChoice) {
     notes.push(ACCOUNT_CHOICE_NOTES[accountChoice]);

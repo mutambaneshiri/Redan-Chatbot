@@ -94,7 +94,7 @@ console.log("\n── What the provider actually sent ──");
 check("two round trips (call, then result)", requests.length === 2, `${requests.length}`);
 check("system prompt included", requests[0]?.hasSystem === true, `${requests[0]?.systemLen} chars`);
 check("knowledge base is in the system prompt", (requests[0]?.systemLen ?? 0) > 8000);
-check("both tools advertised", JSON.stringify(requests[0]?.toolNames) === JSON.stringify(["find_nearest_stations", "escalate_to_human"]));
+check("both tools advertised", JSON.stringify(requests[0]?.toolNames) === JSON.stringify(["find_nearest_stations", "get_directions", "escalate_to_human"]));
 check("tool result fed back on turn 2", requests[1]?.sawToolResult === true);
 check("tool result carried real station data", (requests[1]?.toolResult ?? "").includes("Redan Skyway"));
 check("tool result includes opening hours", (requests[1]?.toolResult ?? "").includes("operating_hours"));

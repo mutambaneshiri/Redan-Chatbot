@@ -1,3 +1,4 @@
+import { directionsLink } from "./directions";
 import { describePlace, nearestPlace } from "./places";
 import {
   findStations,
@@ -61,6 +62,28 @@ export const TOOL_SPECS: ToolSpec[] = [
         },
       },
       required: [],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_directions",
+    description:
+      "Google Maps driving directions to a Redan station, Redan Head Office, or any place in Zimbabwe. Use this for EVERY directions request ('direct me', 'take me there', 'how do I get to...', 'from X to Y') and give the returned link as [Get directions](link). Never build a maps link yourself. Leave 'from' empty to start from the customer's current location.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description:
+            "Destination: a Redan station name (e.g. 'Glenara'), 'Head Office', or a town/suburb.",
+        },
+        from: {
+          type: "string",
+          description:
+            "Optional starting point, only if the customer names one (e.g. 'Redan Glenara', 'Avondale'). Omit to start from their current location.",
+        },
+      },
+      required: ["to"],
       additionalProperties: false,
     },
   },
@@ -221,6 +244,24 @@ export async function executeTool(
             ? "SEED DATA — tell the customer prices are indicative and to confirm at the station"
             : "live",
         }),
+      };
+    }
+
+    case "get_directions": {
+      const to = typeof input.to === "string" ? input.to : "";
+      const from = typeof input.from === "string" && input.from.trim() ? input.from : undefined;
+      const d = directionsLink(to, from);
+      return {
+        result: JSON.stringify(
+          d.error
+            ? { error: d.error }
+            : {
+                to: d.to,
+                from: d.from,
+                directions_link: d.link,
+                tell_customer: `Give the link as [Get directions](link) and say it goes from ${d.from} to ${d.to}. Don't write turn-by-turn directions yourself.`,
+              },
+        ),
       };
     }
 

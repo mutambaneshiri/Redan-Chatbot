@@ -383,6 +383,17 @@ function hoursLine(s: Station): string {
     : "NOT open 24 hours: a 12-hour station. Exact opening and closing times are not supplied, so tell the customer to call the station to confirm.";
 }
 
+/**
+ * Where a map or directions link for this station should point: its exact
+ * coordinates when trusted, otherwise its name and address (or town) for
+ * Google Maps to find.
+ */
+export function stationRouteTarget(s: Station): string {
+  const exact = s.lat !== null && s.lng !== null && !s.locationApprox;
+  if (exact && !(s.routeByAddress && s.address)) return `${s.lat},${s.lng}`;
+  return s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name}, ${s.city}, Zimbabwe`;
+}
+
 /** A compact, model-friendly rendering of a station result. */
 export function formatStation(s: RankedStation): Record<string, unknown> {
   // An approximate location is only the suburb or town centre, so the map
@@ -428,12 +439,6 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
         )}`),
     // Turn-by-turn directions. With no origin, Google Maps starts from the
     // customer's current location on their phone.
-    directions_link: `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${
-      pinByCoords
-        ? `${s.lat},${s.lng}`
-        : encodeURIComponent(
-            s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name}, ${s.city}, Zimbabwe`,
-          )
-    }`,
+    directions_link: `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(stationRouteTarget(s))}`,
   };
 }
