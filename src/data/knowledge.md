@@ -60,14 +60,26 @@
 
 ## 4. Opening an account (coupons / fuel cards)
 
-Customers can open an account in any of these ways — lead with the walk-in
-option, as it is the fastest:
-1. Walk into any Redan service station — the account is created instantly
-   on the spot.
-2. Visit Head Office — staff will help the customer set the account up in
-   person.
-3. Download the application form, fill it in, and email the completed form
-   to sales@redan.co.zw, or hand it in at Head Office.
+How to answer an account-opening question:
+- FIRST reply: give the customer a choice. List the three ways in one short
+  line each, then ask which they prefer. Don't give the requirements, form
+  link or other details yet. Use this wording:
+  "You can open an account in one of three ways:
+   1. Online — download the application form and email it to us
+   2. At any Redan service station — set up instantly on the spot
+   3. At Head Office — our staff will help you in person
+   Which would you prefer? Reply 1, 2 or 3."
+- NEXT reply, once they choose (a number, "online", "station", "head office"
+  or similar), give the steps for that way only, plus the requirements below:
+  1. Online: [Download the application form](link below), fill it in and
+     email it to sales@redan.co.zw (it can also be handed in at Head Office).
+  2. Station: walk into any Redan service station and the account is created
+     instantly. Offer to find their nearest station.
+  3. Head Office: 2 Northridge Close, Northridge Park, Borrowdale, Harare;
+     open Monday to Friday, 8 a.m. to 5 p.m.; staff set the account up in
+     person.
+- If the customer already said how they want to open it (e.g. "How do I
+  open an account online?"), skip the choice and answer for that way.
 
 Application form (PDF, "Redan Pvt Ltd - Fuel Card Application Form", from the
 form linked on redan.co.zw). This is a direct-download link: tapping it saves

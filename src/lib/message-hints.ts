@@ -70,6 +70,32 @@ export function singleFuelAsked(text: string): "petrol" | "diesel" | null {
   return null;
 }
 
+// Account opening: the bot first asks how the customer wants to open the
+// account ("Reply 1, 2 or 3"). Short answers like "2" or "At a station" must
+// be read as that choice, not as a station search.
+type AccountMethod = "online" | "station" | "headOffice";
+
+function askedAccountChoice(prev: string | undefined): boolean {
+  return !!prev && /open an account/i.test(prev) && /reply 1, 2 or 3/i.test(prev);
+}
+
+export function accountMethodChosen(text: string): AccountMethod | null {
+  const t = text.trim().toLowerCase();
+  if (/^(1|one)\b|\bfirst\b|online|\bform\b|e-?mail|website/.test(t)) return "online";
+  if (/^(3|three)\b|\bthird\b|head ?office|\bhq\b|borrowdale|northridge/.test(t)) return "headOffice";
+  if (/^(2|two)\b|\bsecond\b|station|garage|\bsite\b|walk ?in|chiteshi|esiteshini/.test(t)) return "station";
+  return null;
+}
+
+const ACCOUNT_CHOICE_NOTES: Record<AccountMethod, string> = {
+  online:
+    "The customer chose to open the account ONLINE (option 1). Give the application form download link from the knowledge base, say to email the completed form to sales@redan.co.zw, and list the four requirements. Do not call find_nearest_stations.",
+  station:
+    "The customer chose to open the account AT A SERVICE STATION (option 2). Do NOT call find_nearest_stations yet. Explain they can walk into any Redan service station and the account is created instantly, list the four requirements, then offer to find their nearest station if they tell you their town or suburb.",
+  headOffice:
+    "The customer chose to open the account AT HEAD OFFICE (option 3). Give the Head Office address and hours (Monday to Friday, 8 a.m. to 5 p.m.) and list the four requirements. Do not call find_nearest_stations.",
+};
+
 export type Language = "shona" | "ndebele" | "english";
 
 /** Best guess at the language of one message, from distinctive words. */
@@ -125,7 +151,13 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
   const earlierComplaint = history.slice(0, -1).some((t) => t.role === "user" && isComplaint(t.content));
   const inComplaint = complaintNow || (askedForStation && earlierComplaint);
 
-  if (isPurchasePriceQuestion(last.content) && !complaintNow) {
+  const accountChoice = askedAccountChoice(prevAssistant?.content)
+    ? accountMethodChosen(last.content)
+    : null;
+
+  if (accountChoice) {
+    notes.push(ACCOUNT_CHOICE_NOTES[accountChoice]);
+  } else if (isPurchasePriceQuestion(last.content) && !complaintNow) {
     notes.push(
       "This asks the price of coupons, a fuel card top-up or a RedanFlexi top-up. Use ZERA's published price per litre from the knowledge base, in USD, and do not mention any date. Never use a station's pump price, and do not call find_nearest_stations.",
     );

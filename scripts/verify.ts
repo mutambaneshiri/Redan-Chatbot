@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { detectLanguage, isComplaint, isPurchasePriceQuestion, singleFuelAsked, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, detectLanguage, isComplaint, isPurchasePriceQuestion, singleFuelAsked, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -163,6 +163,15 @@ for (const [msg, fuel] of [["Dhiziri imarii kuRedan Mbare?", "diesel"], ["Mafuta
   check(`"${msg}" read as ${fuel}`, singleFuelAsked(msg) === fuel && detectLanguage(msg) === "shona", `${singleFuelAsked(msg)} / ${detectLanguage(msg)}`);
 }
 check("general price question is not single-fuel", singleFuelAsked("Fuel prices at Redan Chipinge?") === null);
+for (const [reply, method] of [["1", "online"], ["2", "station"], ["3", "headOffice"], ["At a station", "station"], ["the second one", "station"], ["Head office", "headOffice"], ["online", "online"]] as const) {
+  check(`account choice "${reply}" → ${method}`, accountMethodChosen(reply) === method, String(accountMethodChosen(reply)));
+}
+const choiceHint = withMessageHints([
+  { role: "user", content: "How do I open an account?" },
+  { role: "assistant", content: "You can open an account in one of three ways: ... Which would you prefer? Reply 1, 2 or 3." },
+  { role: "user", content: "At a station" },
+]);
+check("'At a station' after the account choice is not a station search", /AT A SERVICE STATION/.test(choiceHint[2].content) && /Do NOT call find_nearest_stations yet/.test(choiceHint[2].content));
 check("bare word gets no note", withMessageHints([{ role: "user", content: "FlexiBucks" }])[0].content === "FlexiBucks");
 
 const esc = await executeTool("escalate_to_human", { reason: "bulk", summary: "Wants 20,000L/month." });
