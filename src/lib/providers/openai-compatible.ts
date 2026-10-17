@@ -22,6 +22,9 @@ import type { ProviderConfig } from "./registry";
  * backends vary in what optional fields they accept, and an unknown field is
  * usually a 400 rather than something ignored.
  */
+/** How much opening text to hold back in case a tool call follows. */
+const LEAD_IN_HOLD_CHARS = 160;
+
 export class OpenAICompatibleProvider implements Provider {
   readonly label: string;
   readonly isPaid: boolean;
@@ -68,6 +71,15 @@ export class OpenAICompatibleProvider implements Provider {
         });
 
         let text = "";
+        // Small models often write a lead-in ("Mhoroi! Redan has stations in
+        // Senga, one moment...") before calling a tool, sometimes claiming
+        // something the tool then contradicts. Hold the first few deltas back:
+        // if a tool call follows, they are dropped; otherwise they are sent
+        // on unchanged, in order, and streaming carries on as normal.
+        const held: string[] = [];
+        let heldChars = 0;
+        let released = false;
+        let sawToolCall = false;
         // Tool calls arrive as deltas that must be reassembled by index.
         // `extra` carries provider-specific fields that have to survive the
         // round trip — see the thought_signature note below.
@@ -92,7 +104,21 @@ export class OpenAICompatibleProvider implements Provider {
 
           if (delta.content) {
             text += delta.content;
-            yield { type: "text", text: delta.content };
+            if (released) {
+              yield { type: "text", text: delta.content };
+            } else if (!sawToolCall) {
+              held.push(delta.content);
+              heldChars += delta.content.length;
+              if (heldChars > LEAD_IN_HOLD_CHARS) {
+                released = true;
+                for (const t of held.splice(0)) yield { type: "text", text: t };
+              }
+            }
+          }
+
+          if (delta.tool_calls?.length && !released) {
+            sawToolCall = true;
+            held.length = 0;
           }
 
           for (const tc of delta.tool_calls ?? []) {
@@ -119,6 +145,11 @@ export class OpenAICompatibleProvider implements Provider {
 
         const pending = Object.values(toolCalls).filter((t) => t.name);
 
+        // No tool call after all: send whatever was held back.
+        if (pending.length === 0) {
+          for (const t of held.splice(0)) yield { type: "text", text: t };
+        }
+
         if (pending.length === 0) {
           if (finishReason === "length") {
             yield {
@@ -131,7 +162,9 @@ export class OpenAICompatibleProvider implements Provider {
 
         messages.push({
           role: "assistant",
-          content: text || null,
+          // A dropped lead-in never reached the customer, so keep it out of
+          // the history too.
+          content: (released ? text : "") || null,
           tool_calls: pending.map((t) => ({
             id: t.id,
             type: "function" as const,

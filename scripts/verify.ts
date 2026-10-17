@@ -82,19 +82,36 @@ check("unknown place returns a do-not-substitute note", /Do NOT quote prices/.te
 // Places with no Redan station, anywhere in the country: [place, expected nearest].
 for (const [place, nearest] of [
   ["Borrowdale", "Redan Pomona"],
-  ["Mabvuku", "Redan Epworth"],
-  ["kuMabvuku", "Redan Epworth"],
+  ["Mabvuku", "Redan Ruwa Mavambo"],
+  ["kuMabvuku", "Redan Ruwa Mavambo"],
   ["Nkulumane", "Redan Belevue"],
   ["Chiredzi", "Redan Triangle"],
   ["Domboshava", "Redan Hatcliffe"],
   ["Kuwadzan", "Redan Warren Hills"],
 ]) {
   const r = JSON.parse((await executeTool("find_nearest_stations", { city: place })).result);
-  check(`"${place}" → nearest is ${nearest}`, r.stations[0]?.name === nearest && /no station in/.test(r.note ?? ""), r.stations.map((s: any) => `${s.name} ${s.distance_km}`).join(", "));
+  check(`"${place}" → nearest is ${nearest}`, r.stations[0]?.name === nearest && /no station in/.test(r.note ?? ""), r.stations.map((s: any) => `${s.name} ${s.distance}`).join(", "));
+  check(`"${place}" → every station has a distance`, r.stations.every((s: any) => /^(about [\d.]+ km away|somewhere in )/.test(s.distance ?? "")) && /Always include every station's distance/.test(r.how_to_answer ?? ""));
 }
 const rh = JSON.parse((await executeTool("find_nearest_stations", { city: "Highfield, Harare" })).result);
-check("suburb + town ranks the town's stations from the suburb", rh.stations[0]?.name === "Redan Ardbennie" && rh.stations.every((s: any) => s.town === "Harare"), rh.stations.map((s: any) => s.name).join(", "));
-check("approximate distances are labelled", /approximate/.test(String(rh.stations[0]?.distance_km)));
+check("suburb + town ranks the town's stations from the suburb", rh.stations[0]?.name === "Redan Zindoga" && rh.stations.every((s: any) => s.town === "Harare"), rh.stations.map((s: any) => s.name).join(", "));
+const rc = JSON.parse((await executeTool("find_nearest_stations", { lat: -17.8277, lng: 31.0534 })).result);
+check("town-centre stations near the customer get no fake distance", rc.stations.every((s: any) => !/^about 1 km/.test(s.distance ?? "") || !/Gaydon|Glaudina|Glenara|Second Street|Seventh Street|Skyway/.test(s.name)), rc.stations.map((s: any) => `${s.name}: ${s.distance}`).join("; "));
+check("approximate distances are labelled", /approximate/.test(String(rh.stations[1]?.distance)) && !/approximate/.test(String(rh.stations[0]?.distance)));
+for (const p of ["Highfields", "Highfields Harare", "kuHighfields"]) {
+  const r = JSON.parse((await executeTool("find_nearest_stations", { city: p })).result);
+  check(`"${p}" means Highfield, Harare (not the Matabeleland siding)`, /^Highfield \(Harare\)/.test(r.searched_place ?? "") && r.stations[0]?.name === "Redan Zindoga", `${r.searched_place} → ${r.stations.map((s: any) => s.name).join(", ")}`);
+}
+for (const p of ["Mkoba", "kuMkoba", "Senga"]) {
+  const r = JSON.parse((await executeTool("find_nearest_stations", { city: p })).result);
+  check(`"${p}" (Gweru) → Gweru stations first`, r.stations.slice(0, 2).every((s: any) => s.town === "Gweru"), r.stations.map((s: any) => s.name).join(", "));
+}
+const rgl = JSON.parse((await executeTool("find_nearest_stations", { lat: -17.824, lng: 31.09 })).result);
+check("pin beside Glenara → Glenara first (Redan Locations.xlsx)", rgl.stations[0]?.name === "Redan Glenara", rgl.stations.map((s: any) => s.name).join(", "));
+const rmp = JSON.parse((await executeTool("find_nearest_stations", { city: "Msasa Park" })).result);
+check("'Msasa Park' is a place, not Msasa + Rainham Park", rmp.stations[0]?.name === "Redan Msasa" && !rmp.stations.some((s: any) => s.name === "Redan Rainham Park") && /km away/.test(rmp.stations[0]?.distance ?? ""), rmp.stations.map((s: any) => s.name).join(", "));
+const rgn = JSON.parse((await executeTool("find_nearest_stations", { city: "Glen Norah" })).result);
+check("Glen Norah → Zindoga (Simon Mazorodze Rd) is nearest", rgn.stations[0]?.name === "Redan Zindoga", rgn.stations.map((s: any) => s.name).join(", "));
 
 const r5 = JSON.parse((await executeTool("find_nearest_stations", { city: "Bellevue" })).result);
 check("alternative spelling finds the station", r5.stations.some((s: any) => s.name === "Redan Belevue"));

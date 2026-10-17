@@ -97,6 +97,64 @@ def ascii_alts(name: str, alternates: str) -> list[str]:
     return out[:4]
 
 
+# Suburbs GeoNames files under the wrong province (e.g. Kuwadzana, Glen View
+# and Budiriro under Mashonaland East instead of Harare). Checked against
+# OpenStreetMap's province boundaries on 2026-10-15. Keyed by suburb name;
+# applied only to places of kind "suburb".
+PROVINCE_FIXES = {
+    "Budiriro": "Harare",
+    "Budiriro 4": "Harare",
+    "Budiriro 5": "Harare",
+    "Cannock Close": "Harare",
+    "Cold Comfort": "Harare",
+    "Crowborough North": "Harare",
+    "Dzivareskwa": "Harare",
+    "Gevstein Park": "Harare",
+    "Glenview": "Harare",
+    "Hillview": "Harare",
+    "Hogerty Hill": "Harare",
+    "Kuwadzana": "Harare",
+    "Kuwadzana 3": "Harare",
+    "Kuwadzana 4": "Harare",
+    "Kuwadzana 5": "Harare",
+    "Marimba Park": "Harare",
+    "Mufakose": "Harare",
+    "New Marlborough": "Harare",
+    "Tynwald South": "Harare",
+    "Homefield": "Mashonaland West",
+    "Mount Hampden": "Mashonaland West",
+    "Ascot": "Bulawayo",
+    "Forestvale": "Bulawayo",
+    "Pumula South": "Bulawayo",
+    "Umguza Estate": "Bulawayo",
+    "Waterford": "Bulawayo",
+    "Waterlea": "Bulawayo",
+}
+
+# Only suburbs this close to Harare or Bulawayo are corrected, so a same-named
+# suburb in another town keeps its own province.
+CITY_CENTRES = [(-17.82772, 31.05337), (-20.15, 28.58333)]
+
+
+# Everyday spellings GeoNames lacks, keyed by the GeoNames name. Only applied
+# to places within 40 km of Gweru, so another place of the same name is left
+# alone.
+EXTRA_ALTS = {
+    "Senka": ["Senga"],  # Gweru suburb, home of Midlands State University
+}
+EXTRA_ALT_CENTRES = [(-19.45, 29.81667)]  # Gweru
+
+
+def near_city(lat: float, lng: float, km: float = 30, centres=None) -> bool:
+    import math
+    for clat, clng in centres or CITY_CENTRES:
+        dlat, dlng = math.radians(lat - clat), math.radians(lng - clng)
+        h = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat)) * math.cos(math.radians(clat)) * math.sin(dlng / 2) ** 2
+        if 2 * 6371 * math.asin(math.sqrt(h)) <= km:
+            return True
+    return False
+
+
 def main() -> None:
     src = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     rows = load_rows(src)
@@ -109,6 +167,8 @@ def main() -> None:
             continue
         lat_f, lng_f = FIXES.get(gid, (float(lat), float(lng)))
         province = PROVINCES.get(r[10])
+        if kind == "suburb" and name in PROVINCE_FIXES and near_city(float(lat), float(lng)):
+            province = PROVINCE_FIXES[name]
         population = int(r[14] or 0)
         entry = [
             name,
@@ -119,6 +179,9 @@ def main() -> None:
             population,
         ]
         alts = ascii_alts(name, alternates)
+        for extra in EXTRA_ALTS.get(name, []):
+            if near_city(lat_f, lng_f, km=40, centres=EXTRA_ALT_CENTRES) and extra not in alts:
+                alts.append(extra)
         if alts:
             entry.append(alts)
         places.append(entry)

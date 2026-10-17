@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { RichText } from "./RichText";
-import { FuelPumpIcon, LocationIcon, SendIcon } from "./Icons";
+import { LocationIcon, RedanLogo, SendIcon } from "./Icons";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -26,8 +26,7 @@ const SUGGESTIONS = [
   },
 ];
 
-const GREETING =
-  "Mhoroi! Salibonani! Hi! I'm the Redan assistant.\nEnhancing your experience on the move.\n\nHow can I be of service today? You can write to me in Shona, isiNdebele or English.";
+const GREETING = "Hi! I'm Redi, Redan's assistant. How can I help you today?";
 
 export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
   const [messages, setMessages] = useState<Msg[]>([
@@ -161,11 +160,11 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
     <div className="shell">
       <header className="header">
         <div className="logo">
-          <FuelPumpIcon size={22} />
+          <RedanLogo size={28} />
         </div>
         <div>
-          <h1>Redan Assistant</h1>
-          <p>Coupons · Fuel cards · RedanFlexi · Station finder</p>
+          <h1>Redi</h1>
+          <p>Redan's assistant · Coupons · Fuel cards · RedanFlexi · Stations</p>
         </div>
       </header>
 
@@ -272,7 +271,7 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
       </div>
 
       <div className="r-badge" aria-hidden="true">
-        R
+        <RedanLogo size={22} />
       </div>
     </div>
   );
@@ -281,7 +280,7 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
 function BotAvatar() {
   return (
     <div className="avatar" aria-hidden="true">
-      <FuelPumpIcon size={16} />
+      <RedanLogo size={20} />
     </div>
   );
 }

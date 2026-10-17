@@ -4,8 +4,13 @@ Convert Redan's station spreadsheet into src/data/stations.json.
     npm run import:stations
     python scripts/import_stations.py ["path/to/station file.xlsx"] [output.json]
 
-Default input: the most recently saved .xlsx file in data-sources/ (so a
-renamed copy such as "Station Details1.xlsx" is picked up automatically).
+Default input: the most recently saved station-details spreadsheet in
+data-sources/ (one with CONTACT and PRODUCTS columns), so a renamed copy such
+as "Station Details1.xlsx" is picked up automatically.
+
+Any other spreadsheet in data-sources/ with STATION NAME, LATITUDE and
+LONGITUDE columns (e.g. "Redan Locations.xlsx") supplies map positions for
+stations whose details row has none.
 
 Uses only the Python standard library (an .xlsx file is a zip of XML), so
 there is nothing to pip install.
@@ -21,7 +26,8 @@ Optional, picked up automatically when present:
   OPEN FROM / OPEN TO (e.g. 06:00 / 18:00, for 12-hour stations).
 
 Stations with no ADDRESS fall back to data-sources/website-addresses.json
-(addresses published on redan.co.zw).
+(addresses published on redan.co.zw). Stations with no coordinates fall back
+to data-sources/station-locations.json (positions with a recorded source).
 """
 
 import json
@@ -124,17 +130,48 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def header_of(path: Path) -> tuple[list[list[str]], int | None, list[str]]:
+    """Rows, index of the STATION NAME header row, and its upper-cased cells."""
+    rows = read_first_sheet(path)
+    at = next(
+        (i for i, r in enumerate(rows) if any("STATION NAME" in c.upper() for c in r)),
+        None,
+    )
+    return rows, at, ([c.upper().strip() for c in rows[at]] if at is not None else [])
+
+
+def locations_from_sheets(skip: Path) -> dict[str, tuple[float, float, str]]:
+    """Station name (lower case) -> (lat, lng, file) from location spreadsheets."""
+    found: dict[str, tuple[float, float, str]] = {}
+    for f in sorted(SOURCES.glob("*.xlsx"), key=lambda f: f.stat().st_mtime):
+        if f.name.startswith("~$") or f.resolve() == skip.resolve():
+            continue
+        rows, at, header = header_of(f)
+        if at is None or "LATITUDE" not in header or "LONGITUDE" not in header:
+            continue
+        cn, cla, clo = (header.index(h) for h in ("STATION NAME", "LATITUDE", "LONGITUDE"))
+        for r in rows[at + 1:]:
+            get = lambda i: r[i].strip() if i < len(r) else ""
+            if get(cn) and get(cla) and get(clo):
+                try:
+                    found[get(cn).lower()] = (float(get(cla)), float(get(clo)), f.name)
+                except ValueError:
+                    print(f"  warning: {f.name}: bad coordinates for {get(cn)}")
+    return found
+
+
 def main() -> None:
     if len(sys.argv) > 1:
         src = Path(sys.argv[1])
     else:
-        found = sorted(
-            (f for f in SOURCES.glob("*.xlsx") if not f.name.startswith("~$")),
-            key=lambda f: f.stat().st_mtime,
-        )
-        if not found:
-            sys.exit(f"No .xlsx station file found in {SOURCES}")
-        src = found[-1]
+        details = [
+            f for f in sorted(SOURCES.glob("*.xlsx"), key=lambda f: f.stat().st_mtime)
+            if not f.name.startswith("~$")
+            and {"CONTACT", "PRODUCTS"} <= set(header_of(f)[2])
+        ]
+        if not details:
+            sys.exit(f"No station-details spreadsheet (with CONTACT and PRODUCTS columns) in {SOURCES}")
+        src = details[-1]
     output = Path(sys.argv[2]) if len(sys.argv) > 2 else OUTPUT
     if not src.exists():
         sys.exit(f"Station file not found: {src}")
@@ -205,6 +242,18 @@ def main() -> None:
         if not k.startswith("_")
     }
 
+    sheet_locations = locations_from_sheets(skip=src)
+    if sheet_locations:
+        files = sorted({v[2] for v in sheet_locations.values()})
+        print(f"  map positions for {len(sheet_locations)} stations from {', '.join(files)}")
+
+    loc_file = SOURCES / "station-locations.json"
+    known_locations = {
+        k.lower(): v
+        for k, v in (json.loads(loc_file.read_text(encoding="utf-8")) if loc_file.exists() else {}).items()
+        if not k.startswith("_")
+    }
+
     stations, warnings, seen_ids = [], [], set()
     for r in rows[header_at + 1:]:
         name = cell(r, c_name)
@@ -228,6 +277,11 @@ def main() -> None:
             lat, lng = float(cell(r, c_lat)), float(cell(r, c_lng))
         elif link and (ll := coords_from_link(link)):
             lat, lng = ll
+        if lat is None and name.lower() in sheet_locations:
+            lat, lng, _ = sheet_locations[name.lower()]
+        known = known_locations.get(name.lower(), {})
+        if lat is None and "lat" in known and "lng" in known:
+            lat, lng = float(known["lat"]), float(known["lng"])
 
         contact = format_phone(cell(r, c_phone))
         extra = format_phone(cell(r, c_landline))
@@ -247,7 +301,7 @@ def main() -> None:
             "name": display,
             "aliases": ALIASES.get(name, []),
             "city": town,
-            "address": cell(r, c_address) or web_addresses.get(name.lower()),
+            "address": cell(r, c_address) or known.get("address") or web_addresses.get(name.lower()),
             # The site's cell number is the contact; a landline is kept only
             # as a fallback for stations with no cell number.
             "phone": cell_no,

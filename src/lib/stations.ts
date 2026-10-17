@@ -29,6 +29,8 @@ export type Station = {
    * no coordinates for it yet.
    */
   locationApprox?: boolean;
+  /** For approximate locations: placed at its suburb, or only at its town centre. */
+  locationLevel?: "suburb" | "town";
   mapsLink?: string | null;
   hours: "24h" | "12h";
   openFrom?: string | null;
@@ -65,11 +67,18 @@ const POPULATED = ["city", "suburb", "town", "village", "business centre"];
  * their town, so they can still be ranked by distance. No fuzzy matching here:
  * a near-miss spelling could put a station in the wrong province.
  */
-function approxLocation(s: Station): { lat: number; lng: number } | null {
-  const hint = LOCATION_HINTS[s.name];
-  if (hint) return resolvePlace(hint, { fuzzy: false });
+type ApproxLocation = { lat: number; lng: number; level: "suburb" | "town" };
 
+function approxLocation(s: Station): ApproxLocation | null {
   const town = resolvePlace(s.city, { fuzzy: false });
+  const hint = LOCATION_HINTS[s.name];
+  if (hint) {
+    const at = resolvePlace(hint, { fuzzy: false });
+    if (!at) return null;
+    const level = town && at.name === town.name ? "town" : "suburb";
+    return { lat: at.lat, lng: at.lng, level };
+  }
+
   for (const label of [s.name, ...(s.aliases ?? [])]) {
     const site = resolvePlace(`${label.replace(/^Redan\s+/i, "")}, ${s.city}`, { fuzzy: false });
     if (
@@ -78,17 +87,53 @@ function approxLocation(s: Station): { lat: number; lng: number } | null {
       POPULATED.includes(site.kind) &&
       (!town || haversineKm(site.lat, site.lng, town.lat, town.lng) <= 60)
     ) {
-      return site;
+      return { lat: site.lat, lng: site.lng, level: "suburb" };
     }
   }
-  return town;
+  return town ? { lat: town.lat, lng: town.lng, level: "town" } : null;
 }
 
 const stations: Station[] = (stationData.stations as Station[]).map((s) => {
   if (s.lat !== null && s.lng !== null) return s;
   const at = approxLocation(s);
-  return at ? { ...s, lat: at.lat, lng: at.lng, locationApprox: true } : s;
+  return at
+    ? { ...s, lat: at.lat, lng: at.lng, locationApprox: true, locationLevel: at.level }
+    : s;
 });
+
+// Towns with several stations (Harare, Bulawayo, ...). A station placed only
+// at the centre of one of these could be anywhere in it; a town's only
+// station sitting at the town centre is a fair approximation.
+const stationsPerTown = new Map<string, number>();
+for (const s of stations) {
+  const town = s.city.trim().toLowerCase();
+  stationsPerTown.set(town, (stationsPerTown.get(town) ?? 0) + 1);
+}
+
+/**
+ * Rough radius of a town, from its population: a customer this close to the
+ * centre is "in town", where a town-centre distance means nothing. Farther
+ * out (Zimunya, 15 km from Mutare) the approximate distance is useful.
+ */
+const townRadius = new Map<string, number>();
+function radiusKm(city: string): number {
+  const key = city.trim().toLowerCase();
+  if (!townRadius.has(key)) {
+    const pop = resolvePlace(city, { fuzzy: false })?.population ?? 0;
+    townRadius.set(key, pop > 1_000_000 ? 12 : pop > 500_000 ? 10 : 6);
+  }
+  return townRadius.get(key)!;
+}
+
+/** True when this station's distance means nothing to a customer in its town. */
+function distanceUnknownInTown(s: RankedStation): boolean {
+  return (
+    s.locationLevel === "town" &&
+    s.distanceKm >= 0 &&
+    s.distanceKm < radiusKm(s.city) &&
+    (stationsPerTown.get(s.city.trim().toLowerCase()) ?? 0) > 1
+  );
+}
 
 /** True when the seed file is still placeholder data rather than Redan's list. */
 export const STATION_DATA_IS_PLACEHOLDER =
@@ -142,6 +187,13 @@ function matching(pool: Station[], needle: string, fields: (s: Station) => strin
  * each comma/"in"-separated part is tried, so "Skyway, Harare" means Skyway,
  * not all of Harare. Single whole words count too ("Zindoga Waterfalls").
  */
+/** Words in station names too generic to identify a station on their own. */
+const GENERIC_NAME_WORDS = new Set([
+  "park", "road", "street", "mall", "city", "centre", "center", "main",
+  "first", "second", "hill", "hills", "view", "north", "south", "east", "west",
+  "truck", "stop", "highway", "megawatt",
+]);
+
 function matchStationName(pool: Station[], place: string): Station[] {
   const whole = cleanName(place);
   const direct = matching(pool, whole, byName);
@@ -150,7 +202,12 @@ function matchStationName(pool: Station[], place: string): Station[] {
     const hit = matching(pool, part, byName);
     if (hit.length > 0) return hit;
   }
-  const words = whole.split(/[^a-z0-9]+/).filter((w) => w.length >= 4);
+  // A whole phrase that is itself a place ("Msasa Park", a Harare suburb) is
+  // ranked by distance from that place, not matched word by word.
+  if (resolvePlace(place, { fuzzy: false })?.name.toLowerCase() === whole) return [];
+  const words = whole
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !GENERIC_NAME_WORDS.has(w));
   return pool.filter((s) =>
     byName(s).some((f) =>
       cleanName(f)
@@ -290,10 +347,13 @@ export function findStations(q: StationQuery): StationSearch {
   }));
 
   if (origin) {
-    // Stations without a location (-1) go last.
-    ranked.sort((a, b) =>
-      a.distanceKm < 0 ? 1 : b.distanceKm < 0 ? -1 : a.distanceKm - b.distanceKm,
-    );
+    // Stations without a location (-1) go last. A station placed only at its
+    // town centre has no real distance for a customer inside that town: it
+    // ranks as if at the town's edge, after stations known to be closer but
+    // ahead of anything farther away (Mkoba -> the Gweru stations, not Kwekwe).
+    const effective = (x: RankedStation) =>
+      x.distanceKm < 0 ? Infinity : distanceUnknownInTown(x) ? radiusKm(x.city) : x.distanceKm;
+    ranked.sort((a, b) => effective(a) - effective(b) || a.distanceKm - b.distanceKm);
   }
 
   return { stations: ranked, place, nearestOnly };
@@ -339,12 +399,16 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
         ? `${s.landline} (landline — this site has no cell number)`
         : "not listed",
     ...(s.manager && { site_manager: s.manager }),
-    distance_km:
-      s.distanceKm < 0
-        ? "unknown (no location for this station or customer)"
+    // Ready to quote: "about 7 km away". Only present when a distance is known.
+    ...(s.distanceKm >= 0 && {
+      // A station placed only at its town centre has no meaningful distance
+      // for a customer inside that town; from farther away it is fine.
+      distance: distanceUnknownInTown(s)
+        ? `somewhere in ${s.city} — exact distance not known (say "in ${s.city}" instead of a distance)`
         : s.locationApprox
-          ? `about ${Math.max(1, Math.round(s.distanceKm))} km in a straight line (approximate: measured to the centre of the station's suburb or town)`
-          : s.distanceKm,
+        ? `about ${Math.max(1, Math.round(s.distanceKm))} km away (straight line, approximate: measured to the centre of the station's suburb or town)`
+        : `about ${s.distanceKm < 10 ? s.distanceKm.toFixed(1) : Math.round(s.distanceKm)} km away (straight line)`,
+    }),
     // Seed data's hours are made up, so only real station lists report them.
     ...(STATION_DATA_IS_PLACEHOLDER ? {} : { operating_hours: hoursLine(s) }),
     blend: fuelLine(s.fuel.blend, "Petrol Blend: "),

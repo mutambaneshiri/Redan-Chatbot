@@ -188,6 +188,7 @@ export async function executeTool(
 
       const shown = matches.slice(0, limit);
       const nearest = shown[0].distanceKm;
+      const hasDistances = shown.some((s) => s.distanceKm >= 0);
       const where = search.place ? describePlace(search.place) : undefined;
       const pin = sharedLocationOnly ? nearestPlace(lat!, lng!) : null;
       let note: string | undefined;
@@ -212,6 +213,10 @@ export async function executeTool(
           stations: shown.map(formatStation),
           total_matching: search.nearestOnly ? shown.length : matches.length,
           ...(note && { note }),
+          ...(hasDistances && {
+            how_to_answer:
+              "List each station as: **name** (town) — its distance (e.g. \"about 7 km away\") — map link. Always include every station's distance; where it says the exact distance is not known, say the station is in its town instead. Don't add prices, hours or phone numbers unless the customer asked; offer them instead.",
+          }),
           data_status: STATION_DATA_IS_PLACEHOLDER
             ? "SEED DATA — tell the customer prices are indicative and to confirm at the station"
             : "live",

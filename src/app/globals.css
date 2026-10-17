@@ -9,6 +9,11 @@
      white header text and white bubble text stay legible (WCAG AA). */
   --brand: #1558b0;
   --brand-ink: #ffffff;
+  /* Red trim from the Redan station canopy. Change this one value to match
+     the exact brand red. */
+  --trim: #e2231a;
+  /* Outer edge of the round lion badge. */
+  --badge-edge: #ffffff;
   --bubble-bot: #ffffff;
   --bubble-user: #1558b0;
   --tool: #f0f4f9;
@@ -98,7 +103,16 @@ html, body {
 
 .row { display: flex; align-items: flex-end; gap: 8px; }
 
-/* Fuel-pump avatar beside each assistant message. */
+/* Redan lion, drawn in the current text colour (see RedanLogo). */
+.redan-logo {
+  display: inline-block;
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: url(/redan-lion.svg) center / contain no-repeat;
+  mask: url(/redan-lion.svg) center / contain no-repeat;
+}
+
+/* Redan-lion avatar beside each assistant message. */
 .avatar {
   width: 30px; height: 30px;
   border-radius: 50%;
@@ -207,18 +221,23 @@ html, body {
 .suggestions button:hover { border-color: var(--brand); color: var(--brand); }
 .suggestions button:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Redan "R" badge, bottom-left corner. */
+/* Redan lion badge, bottom-left corner. */
 .r-badge {
   position: fixed;
   left: 20px;
   bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  width: 36px; height: 36px;
+  width: 40px; height: 40px;
   border-radius: 50%;
   background: var(--brand);
   color: var(--brand-ink);
   display: grid; place-items: center;
-  font-weight: 700; font-size: 17px;
-  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  /* Red canopy trim around the blue disc, a thin white line inside it, and
+     a white outer edge so the badge stands out on a dark page. */
+  border: 3px solid var(--trim);
+  box-shadow:
+    inset 0 0 0 1.5px #fff,
+    0 0 0 2px var(--badge-edge),
+    0 2px 8px rgba(0,0,0,.35);
   pointer-events: none;
   z-index: 10;
 }
@@ -279,8 +298,8 @@ html, body {
   .suggestions { grid-template-columns: 1fr; }
 }
 
-/* Once the chat fills the width, the bottom-left corner sits over the
-   location button, so tuck the badge into the top-right of the header. */
+/* Once the chat fills the width, the corner badge would sit over the
+   location button, and the header's own lion already shows the brand. */
 @media (max-width: 860px) {
-  .r-badge { left: auto; right: 16px; bottom: auto; top: calc(18px + env(safe-area-inset-top, 0px)); width: 30px; height: 30px; font-size: 15px; background: rgba(255,255,255,.18); box-shadow: none; }
+  .r-badge { display: none; }
 }

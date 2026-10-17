@@ -26,6 +26,8 @@
   - Website: https://www.redan.co.zw/
   - Web portal (fuel card / account login): https://webportal.redan.co.zw/
   - RedanFlexi Enterprise portal: https://flexienterprise.redan.co.zw/
+  - RedanFlexi app — Android: https://play.google.com/store/apps/details?id=com.redanflexi.app
+  - RedanFlexi app — iPhone: https://apps.apple.com/zw/app/redanflexi/id6746079352
   - Instagram: @redanzw
 
 ## 2. Paper coupons
@@ -64,8 +66,18 @@ option, as it is the fastest:
    on the spot.
 2. Visit Head Office — staff will help the customer set the account up in
    person.
-3. Complete the application form on the Redan website and submit it
-   electronically, or hand it in at Head Office.
+3. Download the application form, fill it in, and email the completed form
+   to sales@redan.co.zw, or hand it in at Head Office.
+
+Application form (PDF, "Redan Pvt Ltd - Fuel Card Application Form", from the
+form linked on redan.co.zw). This is a direct-download link: tapping it saves
+the PDF instead of opening a preview page. Checked 2026-10-17:
+https://drive.google.com/uc?export=download&id=1mr85GXm4yzNWd0FX8Ygxe3k8eNbtKj3z
+
+Completed account opening forms go to: sales@redan.co.zw. Whenever you
+mention the application form, give the form link above and this email
+address, e.g. "[Download the application form](link), fill it in and email it
+to sales@redan.co.zw."
 
 What is needed to open an account (whichever way the customer chooses):
 - Customer ID: a national ID or a passport (no other documents are listed).
@@ -90,8 +102,12 @@ card payment methods in section 5. Opening hours are in section 13.
 Overview: a digital fuel coupon solution. Buy and send fuel from anywhere in the
 world to people in Zimbabwe; recipients redeem at any Redan service station.
 
-- App download: Google Play Store or Apple App Store. Search "RedanFlexi" or
-  "Redan Zimbabwe".
+- App download (links from redan.co.zw, checked 2026-10-16):
+  - Android (Google Play): https://play.google.com/store/apps/details?id=com.redanflexi.app
+  - iPhone / iPad (Apple App Store): https://apps.apple.com/zw/app/redanflexi/id6746079352
+  Whenever you tell a customer to download or get the RedanFlexi app, give
+  BOTH links, labelled Android and iPhone. Customers can also search
+  "RedanFlexi" in either store.
 - Individual signup: download the app, register with your mobile phone details,
   fund via EcoCash, InnBucks, Visa or Mastercard.
 - Partial redemptions are supported; the remaining balance is stored in the

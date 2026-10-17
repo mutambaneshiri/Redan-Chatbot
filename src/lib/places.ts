@@ -138,11 +138,28 @@ const FILLER = new Set(
  * Exact lookups for a phrase, also trying it without a Shona/Ndebele locative
  * prefix ("kuMabvuku", "paMasvingo", "eBulawayo", "koNkulumane").
  */
-function lookup(phrase: string): Place[] {
+function lookupExact(phrase: string): Place[] {
   const direct = INDEX.get(phrase) ?? INDEX.get(phrase.replace(GENERIC_SUFFIX, ""));
   if (direct) return direct;
   const m = phrase.match(/^(?:ku|pa|mu|ko|e)-?\s?([a-z].{3,})$/);
   return m ? (INDEX.get(m[1]) ?? []) : [];
+}
+
+const populated = (h: Place[]) => h.some((p) => rank(p) <= 2);
+
+/**
+ * Like lookupExact, but people often add an "s" to a place name
+ * ("Highfields" for the Harare suburb Highfield). When the name as typed only
+ * matches minor places (a railway siding, farm or mine) and the name without
+ * the "s" is a suburb, town or village, the populated place wins.
+ */
+function lookup(phrase: string): Place[] {
+  const found = lookupExact(phrase);
+  if (phrase.length > 4 && phrase.endsWith("s") && !populated(found)) {
+    const singular = lookupExact(phrase.slice(0, -1));
+    if (populated(singular)) return singular;
+  }
+  return found;
 }
 
 /** Every exact hit in the text: whole parts first, then word runs, longest first. */

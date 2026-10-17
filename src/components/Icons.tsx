@@ -1,33 +1,22 @@
-// Inline SVG icons. They draw in currentColor, so they pick up the colour of
-// whatever they sit in (white in the header, brand blue in the avatar).
+// Icons. They draw in currentColor, so they pick up the colour of whatever
+// they sit in (white in the header, brand blue in the avatar).
 
 type IconProps = { size?: number; className?: string };
 
-/** Fuel pump: the assistant's logo and avatar. */
-export function FuelPumpIcon({ size = 20, className }: IconProps) {
+/**
+ * The Redan lion: the assistant's logo and avatar. The artwork
+ * (public/redan-lion.svg, from Redan's website) is used as a mask, so the lion
+ * takes the colour of whatever it sits in — white in the header, brand blue in
+ * the avatar.
+ */
+export function RedanLogo({ size = 20, className }: IconProps) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.9}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className={className}
-    >
-      {/* Pump body */}
-      <path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16" />
-      {/* Display window */}
-      <rect x="6.5" y="5.5" width="5" height="4" rx="0.8" fill="currentColor" stroke="none" />
-      {/* Base */}
-      <path d="M2.5 21h13" />
-      {/* Hose and nozzle */}
-      <path d="M14 12h1.5a2 2 0 0 1 2 2v3a1.5 1.5 0 0 0 3 0V8.6a1.5 1.5 0 0 0-.44-1.06L17.5 5" />
-      <path d="M18.5 9.5h2" />
-    </svg>
+    <span
+      role="img"
+      aria-label="Redan"
+      className={["redan-logo", className].filter(Boolean).join(" ")}
+      style={{ width: size, height: size }}
+    />
   );
 }
 

@@ -1,0 +1,42 @@
+{
+  "_note": "Map positions for stations, used only when the station spreadsheet has no LATITUDE/LONGITUDE for them. Keys are station names as in the spreadsheet. Record where each position came from; replace with a pin from the site when available.",
+  "Zindoga": {
+    "lat": -17.9053454,
+    "lng": 30.9984641,
+    "address": "Simon Mazorodze Road, Zindoga, Waterfalls, Harare",
+    "source": "OpenStreetMap: 'Zindoga' shop on Simon Mazorodze Road, Waterfalls (looked up 2026-10-15); confirmed by Redan as along Simon Mazorodze Road near Glen Norah"
+  },
+  "Chinhoyi": {
+    "lat": -17.3585422,
+    "lng": 30.1976046,
+    "address": "Magamba Road, Chinhoyi CBD, Chinhoyi",
+    "source": "OpenStreetMap: fuel station 'REDAN', Magamba Road, Chinhoyi CBD (looked up 2026-10-15); the only Redan station in Chinhoyi"
+  },
+  "Ruwa Mavambo": {
+    "lat": -17.8850507,
+    "lng": 31.2236731,
+    "address": "3793 Shumba Road, Ruwa",
+    "source": "OpenStreetMap: fuel station 'Redan Ruwa', 3793 Shumba Road, Ruwa (looked up 2026-10-15)"
+  },
+  "_needs_review": {
+    "_note": "Redan fuel stations found on OpenStreetMap that could not be matched to one station with confidence. NOT used by the bot. Confirm which station each is (or that it isn't one), then move it up as a normal entry keyed by the station's name.",
+    "North-east Harare (Hatcliffe? Hatcliffe First Street?)": {
+      "lat": -17.7348653,
+      "lng": 31.1081406,
+      "osm": "fuel station 'Redan', unnamed, north-east Harare",
+      "why": "No name or street on OpenStreetMap; several possible stations."
+    },
+    "North-west Bulawayo (Belevue? Lobengula? Makokoba?)": {
+      "lat": -20.1122523,
+      "lng": 28.5137061,
+      "osm": "fuel station 'Redan', unnamed, north-west Bulawayo",
+      "why": "No name or street on OpenStreetMap; could be a Bulawayo site such as Luveve that isn't in the spreadsheet."
+    },
+    "Mvuma (not in the spreadsheet)": {
+      "lat": -19.2753645,
+      "lng": 30.5419067,
+      "osm": "fuel station 'Redan', Harare-Beitbridge Road, Mvuma",
+      "why": "No Mvuma station in the spreadsheet: a missing station, a closed one, or a mislabelled OSM entry."
+    }
+  }
+}

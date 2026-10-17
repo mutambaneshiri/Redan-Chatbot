@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Redan Assistant",
+  title: "Redi · Redan Assistant",
   description: "Fuel coupons, cards, RedanFlexi and station finder.",
 };
 
