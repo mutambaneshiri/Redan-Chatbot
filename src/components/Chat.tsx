@@ -39,9 +39,10 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
-  // Set when the server detects the customer wants their nearest station but
-  // hasn't shared a location: we show a "share my location" button.
-  const [askLocation, setAskLocation] = useState(false);
+  // Whether to show the "share my location" button. True at the start of the
+  // conversation, and set again by the server whenever a request needs a
+  // location (nearest station, directions). Cleared once a location is shared.
+  const [askLocation, setAskLocation] = useState(true);
 
   const logRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -159,6 +160,9 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
 
     const next: Msg[] = [...messages, { role: "user", content: trimmed }];
     setInput("");
+    // Hide the start-of-chat location prompt; the server re-requests it if the
+    // question actually needs a location.
+    setAskLocation(false);
 
     // Placeholder assistant bubble that fills in as deltas arrive.
     setMessages([...next, { role: "assistant", content: "" }]);
@@ -172,7 +176,18 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
   async function resendWithLocation(loc: { lat: number; lng: number }) {
     if (busy) return;
     const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
-    if (lastUserIdx < 0) return;
+    if (lastUserIdx < 0) {
+      // Shared at the start, before asking anything: just acknowledge it.
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Thanks — I've got your location. Ask for your nearest station, or directions to any Redan station, and I'll use it.",
+        },
+      ]);
+      return;
+    }
     const convo = messages.slice(0, lastUserIdx + 1);
     setMessages([...convo, { role: "assistant", content: "" }]);
     await stream(convo.slice(1), loc);
@@ -241,7 +256,7 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
           <div className="row bot">
             <BotAvatar />
             <div className="bubble loc-request">
-              <p>Share your location and I&apos;ll find the Redan stations closest to you.</p>
+              <p>Share your location so I can find your nearest Redan station and give directions from where you are.</p>
               <button
                 className="loc-share-btn"
                 onClick={() =>
