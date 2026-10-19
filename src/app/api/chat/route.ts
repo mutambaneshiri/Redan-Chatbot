@@ -62,8 +62,7 @@ export async function POST(req: Request) {
                 type: "text",
                 text:
                   "Happy to find the Redan stations closest to you. Tap " +
-                  "“Share my location” below and I’ll use your exact " +
-                  "position. Prefer not to? Just tell me your suburb or town.",
+                  "“Share my location” below so I can see where you are.",
               }) + "\n",
             ),
           );

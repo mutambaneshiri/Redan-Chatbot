@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     if (wantsNearbyStation(text)) {
       await sendWhatsAppLocationRequest(
         from,
-        "To find the Redan service stations closest to you, tap the button below to share your location. You can also just reply with your town or suburb.",
+        "To find the Redan service stations closest to you, tap the button below to share your location.",
       );
       return Response.json({ ok: true });
     }
