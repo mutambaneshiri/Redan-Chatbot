@@ -246,7 +246,7 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
       ? `, starting from "${route.from}"`
       : " (no starting point given: leave 'from' empty so it starts at the customer's current location)";
     notes.push(
-      `The customer wants directions to "${directionsTo}"${route?.to ? "" : " (from earlier in this conversation)"}${fromPart}. Call get_directions with to "${directionsTo}"${route?.from ? ` and from "${route.from}"` : ""}, then give its link as "[Get directions](link)". Never build a maps link yourself.`,
+      `The customer wants directions to "${directionsTo}"${route?.to ? "" : " (from earlier in this conversation)"}${fromPart}. Call get_directions with to "${directionsTo}"${route?.from ? ` and from "${route.from}"` : ""}, then give its link as a markdown link to the exact directions_link URL from the tool result, e.g. "[Get directions](https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=...)". Copy the whole URL, use a single pair of square brackets, and never write the literal word "link" as the target. Never build a maps link yourself.`,
     );
   } else if (accountChoice) {
     notes.push(ACCOUNT_CHOICE_NOTES[accountChoice]);

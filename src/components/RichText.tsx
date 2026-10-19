@@ -70,9 +70,12 @@ export function RichText({ text }: { text: string }) {
     const [, label, labelledUrl, bareUrl, bold] = m;
 
     if (labelledUrl) {
+      // Small models sometimes double the opening bracket ("[[Get directions]")
+      // or pad the label; show a clean label, not the stray punctuation.
+      const clean = label.replace(/^[[\s]+/, "").replace(/\s+$/, "") || label;
       out.push(
         <Link key={key++} href={toHref(labelledUrl)}>
-          {label}
+          {clean}
         </Link>,
       );
     } else if (bareUrl) {
