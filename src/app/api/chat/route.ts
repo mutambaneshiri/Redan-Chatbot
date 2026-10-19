@@ -41,8 +41,10 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   // When the customer wants the station nearest to them but no location has
-  // been shared, tell the client to offer a "share my location" button. Only
-  // on location intent, and only when we don't already have coordinates.
+  // been shared, lead with the "share my location" offer instead of running
+  // the model (which asks "which town are you in?"). Sharing a pin is the
+  // precise route; naming a town stays only as a fallback. Only on location
+  // intent, and only when we don't already have coordinates.
   const lastUser = [...incoming].reverse().find((m) => m.role === "user");
   const askForLocation =
     !body.location && !!lastUser && wantsNearbyStation(lastUser.content);
@@ -54,6 +56,19 @@ export async function POST(req: Request) {
           controller.enqueue(
             encoder.encode(JSON.stringify({ type: "request_location" }) + "\n"),
           );
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                type: "text",
+                text:
+                  "Happy to find the Redan stations closest to you. Tap " +
+                  "“Share my location” below and I’ll use your exact " +
+                  "position. Prefer not to? Just tell me your suburb or town.",
+              }) + "\n",
+            ),
+          );
+          // Skip the model for this turn: the share-location button is the ask.
+          return;
         }
         for await (const event of runAgent(history)) {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
