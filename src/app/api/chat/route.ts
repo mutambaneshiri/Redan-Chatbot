@@ -1,5 +1,11 @@
 import { runAgent, type ChatTurn } from "@/lib/agent";
-import { wantsNearbyStation } from "@/lib/message-hints";
+import {
+  wantsNearbyStation,
+  wantsDirections,
+  routeIn,
+  lastStationDiscussed,
+} from "@/lib/message-hints";
+import { directionsLink } from "@/lib/directions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,37 +46,77 @@ export async function POST(req: Request) {
 
   const encoder = new TextEncoder();
 
-  // When the customer wants the station nearest to them but no location has
-  // been shared, lead with the "share my location" offer instead of running
-  // the model (which asks "which town are you in?"). Sharing a pin is the
-  // precise route; naming a town stays only as a fallback. Only on location
-  // intent, and only when we don't already have coordinates.
+  // Decide what to do before the model runs. Two intents are handled here, on
+  // the server, so the result is deterministic (no mangled links) and the
+  // customer is always asked to share a location rather than type a town:
+  //   - directions: route from the shared location to the destination;
+  //   - nearest station: list the stations closest to the shared location.
+  // Either way, if no location has been shared yet we lead with the
+  // "share my location" button instead of calling the model.
+  type PreAction =
+    | { kind: "ask_location"; text: string }
+    | { kind: "reply"; text: string }
+    | { kind: "model" };
+
   const lastUser = [...incoming].reverse().find((m) => m.role === "user");
-  const askForLocation =
-    !body.location && !!lastUser && wantsNearbyStation(lastUser.content);
+  const hasLoc = !!body.location;
+  let pre: PreAction = { kind: "model" };
+
+  if (lastUser) {
+    const text = lastUser.content;
+    if (wantsDirections(text)) {
+      // Destination: named in this message, else the station just discussed.
+      const route = routeIn(text);
+      const destination = route.to ?? lastStationDiscussed(history.slice(0, -1));
+      const probe = destination ? directionsLink(destination) : { error: "x" };
+      if (destination && !probe.error) {
+        if (hasLoc || route.from) {
+          const d = directionsLink(
+            destination,
+            route.from ?? undefined,
+            body.location ?? undefined,
+          );
+          if (!d.error) {
+            pre = {
+              kind: "reply",
+              text: `Here are driving directions from ${d.from} to ${d.to}:\n\n[Get directions](${d.link})`,
+            };
+          }
+        } else {
+          // No location yet and no starting point named: ask to share it.
+          pre = {
+            kind: "ask_location",
+            text: `Happy to direct you to ${probe.to}. Tap “Share my location” below so I can route you from where you are.`,
+          };
+        }
+      }
+      // No destination, or it can't be placed: let the model ask where to.
+    } else if (!hasLoc && wantsNearbyStation(text)) {
+      pre = {
+        kind: "ask_location",
+        text:
+          "Happy to find the Redan stations closest to you. Tap " +
+          "“Share my location” below so I can see where you are.",
+      };
+    }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
+      const emit = (e: unknown) =>
+        controller.enqueue(encoder.encode(JSON.stringify(e) + "\n"));
       try {
-        if (askForLocation) {
-          controller.enqueue(
-            encoder.encode(JSON.stringify({ type: "request_location" }) + "\n"),
-          );
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({
-                type: "text",
-                text:
-                  "Happy to find the Redan stations closest to you. Tap " +
-                  "“Share my location” below so I can see where you are.",
-              }) + "\n",
-            ),
-          );
-          // Skip the model for this turn: the share-location button is the ask.
+        if (pre.kind === "ask_location") {
+          emit({ type: "request_location" });
+          emit({ type: "text", text: pre.text });
+          return;
+        }
+        if (pre.kind === "reply") {
+          emit({ type: "text", text: pre.text });
           return;
         }
         for await (const event of runAgent(history)) {
-          controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+          emit(event);
         }
       } catch (err) {
         console.error("[redan] stream failed:", err);

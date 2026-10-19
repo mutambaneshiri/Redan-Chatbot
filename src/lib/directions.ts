@@ -40,7 +40,11 @@ export function resolvePoint(text: string): Point | null {
   return null;
 }
 
-export function directionsLink(to: string, from?: string): {
+export function directionsLink(
+  to: string,
+  from?: string,
+  originCoords?: { lat: number; lng: number },
+): {
   link?: string;
   from?: string;
   to?: string;
@@ -48,16 +52,30 @@ export function directionsLink(to: string, from?: string): {
 } {
   const dest = resolvePoint(to);
   if (!dest) return { error: `Could not find "${to}" on the map. Ask the customer which Redan station, or which town or suburb, they mean.` };
-  const fromHere = !from || HERE_WORDS.test(from.trim());
-  const origin = fromHere ? null : resolvePoint(from!);
-  if (!fromHere && !origin) {
-    return { error: `Could not find the starting point "${from}" on the map. Ask the customer where they are starting from, or offer directions from their current location.` };
+
+  // A shared location is the most precise origin: route straight from it.
+  let originTarget: string | null = null;
+  let originLabel = "the customer's current location";
+  if (originCoords) {
+    originTarget = `${originCoords.lat},${originCoords.lng}`;
+    originLabel = "your shared location";
+  } else {
+    const fromHere = !from || HERE_WORDS.test(from.trim());
+    const origin = fromHere ? null : resolvePoint(from!);
+    if (!fromHere && !origin) {
+      return { error: `Could not find the starting point "${from}" on the map. Ask the customer where they are starting from, or offer directions from their current location.` };
+    }
+    if (origin) {
+      originTarget = origin.target;
+      originLabel = origin.label;
+    }
   }
+
   const params = new URLSearchParams({ api: "1", travelmode: "driving", destination: dest.target });
-  if (origin) params.set("origin", origin.target);
+  if (originTarget) params.set("origin", originTarget);
   return {
     link: `https://www.google.com/maps/dir/?${params.toString()}`,
-    from: origin ? origin.label : "the customer's current location",
+    from: originLabel,
     to: dest.label,
   };
 }
