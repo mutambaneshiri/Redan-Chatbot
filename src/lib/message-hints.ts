@@ -1,5 +1,6 @@
 import type { ChatTurn } from "./providers";
 import { stationsMentionedIn } from "./stations";
+import { resolvePlace } from "./places";
 
 /**
  * Small models (ministral-14b) are unreliable at two things: telling Shona
@@ -104,20 +105,32 @@ export function wantsDirections(text: string): boolean {
   return DIRECTIONS.test(text);
 }
 
-// The customer wants the station nearest to *them* — as opposed to naming a
-// town ("nearest station in Gweru", which needs no location). Only the
-// self-referential phrasings, so sharing a GPS location genuinely helps.
-// English, Shona and isiNdebele.
+// Explicitly self-referential ("near me", "my nearest"): sharing a location
+// always helps here, even if a place word also appears. English, Shona,
+// isiNdebele.
 const NEARBY_SELF =
   /\b(near(est)? me|near my|stations? near me|close to me|around me|next to me|by me|(nearest|closest)[^.?!]{0,20}to me|my nearest|my (current )?location|where am i|padyo neni|pedyo neni|iri pedyo|eduze kwami|eseduze)\b/i;
 
+// Any nearest/closest/nearby wording, self-referential or not. English, Shona,
+// isiNdebele.
+const NEAREST_CUE =
+  /\b(near(est|by)?|closest|close by|padyo|pedyo|eduze|eseduze)\b/i;
+
 /**
- * True when the customer is asking for the station closest to where they are,
- * so offering to share a location (web button / WhatsApp location request) is
- * useful. False when they name a place, since a lookup already answers that.
+ * True when the customer wants the station closest to where they are, so we
+ * should ask for a location (web button / WhatsApp location request) before
+ * listing anything. It fires on any "nearest / closest / nearby" request —
+ * UNLESS they named a Redan station or a place we recognise, in which case a
+ * lookup already answers it (e.g. "nearest station in Gweru"). A self-
+ * referential phrasing ("near me") always fires.
  */
 export function wantsNearbyStation(text: string): boolean {
-  return NEARBY_SELF.test(text);
+  if (NEARBY_SELF.test(text)) return true;
+  if (!NEAREST_CUE.test(text)) return false;
+  // They asked for the nearest, but gave no place to measure from.
+  if (stationsMentionedIn(text).length > 0) return false;
+  if (resolvePlace(text, { fuzzy: false })) return false;
+  return true;
 }
 
 const HEAD_OFFICE_RE = /\b(head ?office|hq|headquarters|main office)\b/i;
