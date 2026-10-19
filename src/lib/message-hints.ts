@@ -104,6 +104,22 @@ export function wantsDirections(text: string): boolean {
   return DIRECTIONS.test(text);
 }
 
+// The customer wants the station nearest to *them* — as opposed to naming a
+// town ("nearest station in Gweru", which needs no location). Only the
+// self-referential phrasings, so sharing a GPS location genuinely helps.
+// English, Shona and isiNdebele.
+const NEARBY_SELF =
+  /\b(near(est)? me|near my|stations? near me|close to me|around me|next to me|by me|(nearest|closest)[^.?!]{0,20}to me|my nearest|my (current )?location|where am i|padyo neni|pedyo neni|iri pedyo|eduze kwami|eseduze)\b/i;
+
+/**
+ * True when the customer is asking for the station closest to where they are,
+ * so offering to share a location (web button / WhatsApp location request) is
+ * useful. False when they name a place, since a lookup already answers that.
+ */
+export function wantsNearbyStation(text: string): boolean {
+  return NEARBY_SELF.test(text);
+}
+
 const HEAD_OFFICE_RE = /\b(head ?office|hq|headquarters|main office)\b/i;
 
 /**

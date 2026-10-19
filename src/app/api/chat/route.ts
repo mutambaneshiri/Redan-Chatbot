@@ -1,4 +1,5 @@
 import { runAgent, type ChatTurn } from "@/lib/agent";
+import { wantsNearbyStation } from "@/lib/message-hints";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -39,9 +40,21 @@ export async function POST(req: Request) {
 
   const encoder = new TextEncoder();
 
+  // When the customer wants the station nearest to them but no location has
+  // been shared, tell the client to offer a "share my location" button. Only
+  // on location intent, and only when we don't already have coordinates.
+  const lastUser = [...incoming].reverse().find((m) => m.role === "user");
+  const askForLocation =
+    !body.location && !!lastUser && wantsNearbyStation(lastUser.content);
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        if (askForLocation) {
+          controller.enqueue(
+            encoder.encode(JSON.stringify({ type: "request_location" }) + "\n"),
+          );
+        }
         for await (const event of runAgent(history)) {
           controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
         }

@@ -39,6 +39,9 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
+  // Set when the server detects the customer wants their nearest station but
+  // hasn't shared a location: we show a "share my location" button.
+  const [askLocation, setAskLocation] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -50,46 +53,42 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
     });
   }, [messages, activeTool, busy]);
 
-  function shareLocation() {
+  function shareLocation(then?: (loc: { lat: number; lng: number }) => void) {
     if (!navigator.geolocation) {
       setError("Your browser can't share location. Just type your town instead.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLocation({
+        const loc = {
           lat: Number(pos.coords.latitude.toFixed(5)),
           lng: Number(pos.coords.longitude.toFixed(5)),
-        });
+        };
+        setLocation(loc);
+        setAskLocation(false);
         setError(null);
+        then?.(loc);
       },
       () => setError("Couldn't get your location. Type your town instead."),
       { timeout: 8000 },
     );
   }
 
-  async function send(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
-
-    const next: Msg[] = [...messages, { role: "user", content: trimmed }];
-    setMessages(next);
-    setInput("");
+  // Posts `apiMessages` (greeting already dropped) with the given location and
+  // streams the reply into the trailing empty assistant bubble.
+  async function stream(
+    apiMessages: Msg[],
+    loc: { lat: number; lng: number } | null,
+  ) {
     setBusy(true);
     setError(null);
-
-    // Placeholder assistant bubble that fills in as deltas arrive.
-    setMessages([...next, { role: "assistant", content: "" }]);
+    setActiveTool(null);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Drop the client-side greeting; the model doesn't need it.
-          messages: next.slice(1),
-          location,
-        }),
+        body: JSON.stringify({ messages: apiMessages, location: loc }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -127,6 +126,9 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
             setActiveTool(event.name);
           } else if (event.type === "tool_end") {
             setActiveTool(null);
+          } else if (event.type === "request_location") {
+            // Offer the share-location button (only if not already shared).
+            setAskLocation(true);
           } else if (event.type === "error") {
             acc += (acc ? "\n\n" : "") + event.message;
             setMessages((prev) => {
@@ -149,6 +151,31 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
       setBusy(false);
       setActiveTool(null);
     }
+  }
+
+  async function send(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+
+    const next: Msg[] = [...messages, { role: "user", content: trimmed }];
+    setInput("");
+
+    // Placeholder assistant bubble that fills in as deltas arrive.
+    setMessages([...next, { role: "assistant", content: "" }]);
+
+    // Drop the client-side greeting; the model doesn't need it.
+    await stream(next.slice(1), location);
+  }
+
+  // After the customer shares a location from the prompt, re-answer their last
+  // message with the coordinates attached — no duplicate user bubble.
+  async function resendWithLocation(loc: { lat: number; lng: number }) {
+    if (busy) return;
+    const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+    if (lastUserIdx < 0) return;
+    const convo = messages.slice(0, lastUserIdx + 1);
+    setMessages([...convo, { role: "assistant", content: "" }]);
+    await stream(convo.slice(1), loc);
   }
 
   const lastIsEmptyAssistant =
@@ -210,6 +237,23 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
           </div>
         )}
 
+        {askLocation && !location && !busy && (
+          <div className="row bot">
+            <BotAvatar />
+            <div className="bubble loc-request">
+              <p>Share your location and I&apos;ll find the Redan stations closest to you.</p>
+              <button
+                className="loc-share-btn"
+                onClick={() =>
+                  shareLocation((loc) => resendWithLocation(loc))
+                }
+              >
+                <LocationIcon /> Share my location
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && <div className="error-note">{error}</div>}
       </div>
 
@@ -226,7 +270,7 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
       <div className="composer">
         <button
           className={`icon-btn ${location ? "active" : ""}`}
-          onClick={shareLocation}
+          onClick={() => shareLocation()}
           title={
             location
               ? `Location shared (${location.lat}, ${location.lng})`

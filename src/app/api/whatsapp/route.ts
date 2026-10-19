@@ -1,5 +1,6 @@
 import { runAgentSync, type ChatTurn } from "@/lib/agent";
 import { toWhatsAppText } from "@/lib/whatsapp-format";
+import { wantsNearbyStation } from "@/lib/message-hints";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,6 +50,16 @@ export async function POST(req: Request) {
     }] Which Redan stations are closest to me?`;
   } else if (message.type === "text") {
     text = String(message.text?.body ?? "").slice(0, 4000);
+    // Nearest-station request: send WhatsApp's native location-request button
+    // instead of a text reply. When the customer taps it and shares, WhatsApp
+    // delivers a `location` message, handled above.
+    if (wantsNearbyStation(text)) {
+      await sendWhatsAppLocationRequest(
+        from,
+        "To find the Redan service stations closest to you, tap the button below to share your location. You can also just reply with your town or suburb.",
+      );
+      return Response.json({ ok: true });
+    }
   } else {
     text = `[Customer sent an unsupported ${message.type} message]`;
   }
@@ -95,5 +106,48 @@ async function sendWhatsAppMessage(to: string, body: string) {
 
   if (!res.ok) {
     console.error("[redan] WhatsApp send failed:", res.status, await res.text());
+  }
+}
+
+/** Interactive message with a button that asks the customer to share a pin. */
+async function sendWhatsAppLocationRequest(to: string, bodyText: string) {
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!token || !phoneId) {
+    console.warn(
+      "[redan] WhatsApp credentials not set; location request not sent:",
+      bodyText,
+    );
+    return;
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/v21.0/${phoneId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "interactive",
+        interactive: {
+          type: "location_request_message",
+          body: { text: bodyText },
+          action: { name: "send_location" },
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    console.error(
+      "[redan] WhatsApp location request failed:",
+      res.status,
+      await res.text(),
+    );
   }
 }
