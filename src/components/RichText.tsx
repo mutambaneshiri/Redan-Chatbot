@@ -11,9 +11,15 @@
  * escaped by React as ordinary text.
  *
  * Security: only http and https URLs become anchors. The scheme is enforced by
- * the pattern itself, so a `javascript:` or `data:` URL — whether the model
- * invents one or a customer pastes one that gets echoed back — renders as inert
- * text rather than something clickable.
+ * the pattern itself (a bare `www.` URL is upgraded to https, nothing else), so
+ * a `javascript:` or `data:` URL — whether the model invents one or a customer
+ * pastes one that gets echoed back — renders as inert text rather than
+ * something clickable.
+ *
+ * Tolerant on purpose: the reply comes from small, free-tier models that format
+ * links inconsistently, and an unmatched link renders as literal `[...](...)`
+ * brackets the customer cannot tap. So we also accept whitespace inside the
+ * parentheses — `[label]( url )` — and a scheme-less `www.` URL.
  */
 
 // Explicit import: Next compiles JSX with the automatic runtime, but the
@@ -21,9 +27,21 @@
 // React.createElement transform and needs React in scope.
 import * as React from "react";
 
-// [label](url) | bare url | **bold**
-const TOKEN =
-  /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)|\*\*([^*\n]+)\*\*/g;
+// A URL we will link to: http(s), or a bare www. host we upgrade to https.
+const URL_CORE = String.raw`(?:https?:\/\/|www\.)`;
+
+// [label]( url ) (whitespace tolerated) | bare url | **bold**
+const TOKEN = new RegExp(
+  String.raw`\[([^\]]+)\]\(\s*(${URL_CORE}[^\s)]+?)\s*\)` +
+    String.raw`|(${URL_CORE}[^\s<]+)` +
+    String.raw`|\*\*([^*\n]+)\*\*`,
+  "g",
+);
+
+// A scheme-less www. link still needs a scheme to be a valid href.
+function toHref(url: string): string {
+  return /^www\./i.test(url) ? `https://${url}` : url;
+}
 
 // A URL at the end of a sentence swallows the punctuation; give it back.
 function trimTrailing(url: string): [string, string] {
@@ -53,15 +71,15 @@ export function RichText({ text }: { text: string }) {
 
     if (labelledUrl) {
       out.push(
-        <Link key={key++} href={labelledUrl}>
+        <Link key={key++} href={toHref(labelledUrl)}>
           {label}
         </Link>,
       );
     } else if (bareUrl) {
-      const [href, tail] = trimTrailing(bareUrl);
+      const [shown, tail] = trimTrailing(bareUrl);
       out.push(
-        <Link key={key++} href={href}>
-          {href}
+        <Link key={key++} href={toHref(shown)}>
+          {shown}
         </Link>,
       );
       if (tail) out.push(tail);
