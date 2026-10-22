@@ -6,7 +6,8 @@ import {
   lastStationDiscussed,
 } from "@/lib/message-hints";
 import { directionsLink } from "@/lib/directions";
-import { findStations } from "@/lib/stations";
+import { findStations, stationsMentionedIn } from "@/lib/stations";
+import { resolvePlace } from "@/lib/places";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -66,34 +67,33 @@ export async function POST(req: Request) {
   if (lastUser) {
     const text = lastUser.content;
     if (wantsDirections(text)) {
-      // Destination: named in this message, else the station just discussed.
       const route = routeIn(text);
-      const destination = route.to ?? lastStationDiscussed(history.slice(0, -1));
-      const probe = destination ? directionsLink(destination) : { error: "x" };
-      if (destination && !probe.error) {
-        if (hasLoc || route.from) {
-          const d = directionsLink(
-            destination,
-            route.from ?? undefined,
-            body.location ?? undefined,
-          );
-          if (!d.error) {
-            pre = {
-              kind: "reply",
-              text: `Here are driving directions from ${d.from} to ${d.to}:\n\n[Get directions](${d.link})`,
-            };
+      const named = stationsMentionedIn(text);
+      // "nearest / closest station", or "a station", with no specific station
+      // named, means route to the CLOSEST station — not to a place literally.
+      const proximity =
+        named.length === 0 &&
+        (/\b(nearest|closest)\b/i.test(text) ||
+          /\b(a|an|any|the)\s+(redan\s+)?(service\s+)?station\b/i.test(text));
+
+      if (proximity) {
+        // Closest station to a named place (e.g. "closest to Parirenyatwa") is
+        // measured from that place and routed from it — independent of where
+        // the customer is now. With no place named it means closest to the
+        // customer, so ask them to share a location.
+        const anchor = resolvePlace(text);
+        if (anchor) {
+          const nearest = findStations({ lat: anchor.lat, lng: anchor.lng }).stations[0];
+          if (nearest) {
+            const d = directionsLink(nearest.name, undefined, { lat: anchor.lat, lng: anchor.lng });
+            if (!d.error) {
+              pre = {
+                kind: "reply",
+                text: `The Redan station closest to ${anchor.name} is **${nearest.name}** (${nearest.city}). Here are driving directions from ${anchor.name}:\n\n[Get directions](${d.link})`,
+              };
+            }
           }
-        } else {
-          // No location yet and no starting point named: ask to share it.
-          pre = {
-            kind: "ask_location",
-            text: `Happy to direct you to ${probe.to}. Tap “Share my location” below so I can route you from where you are.`,
-          };
-        }
-      } else if (/\b(station|stations|garage|fuel|petrol|diesel|redan|nearest|closest)\b/i.test(text)) {
-        // Directions to "a station" / "the nearest station", no specific one
-        // named: find the nearest to the shared location and route there.
-        if (!hasLoc) {
+        } else if (!hasLoc) {
           pre = {
             kind: "ask_location",
             text:
@@ -101,10 +101,7 @@ export async function POST(req: Request) {
               "“Share my location” below so I can find it and route you there.",
           };
         } else {
-          const nearest = findStations({
-            lat: body.location!.lat,
-            lng: body.location!.lng,
-          }).stations[0];
+          const nearest = findStations({ lat: body.location!.lat, lng: body.location!.lng }).stations[0];
           if (nearest) {
             const d = directionsLink(nearest.name, undefined, body.location!);
             if (!d.error) {
@@ -115,8 +112,29 @@ export async function POST(req: Request) {
             }
           }
         }
+      } else {
+        // A specific destination: a named station, "Head Office", or a place.
+        const destination = route.to ?? lastStationDiscussed(history.slice(0, -1));
+        const probe = destination ? directionsLink(destination) : { error: "x" };
+        if (destination && !probe.error) {
+          if (hasLoc || route.from) {
+            const d = directionsLink(destination, route.from ?? undefined, body.location ?? undefined);
+            if (!d.error) {
+              pre = {
+                kind: "reply",
+                text: `Here are driving directions from ${d.from} to ${d.to}:\n\n[Get directions](${d.link})`,
+              };
+            }
+          } else {
+            // No location yet and no starting point named: ask to share it.
+            pre = {
+              kind: "ask_location",
+              text: `Happy to direct you to ${probe.to}. Tap “Share my location” below so I can route you from where you are.`,
+            };
+          }
+        }
+        // Otherwise the destination can't be placed: let the model ask where to.
       }
-      // Otherwise (directions but no station/place context): model asks where to.
     } else if (!hasLoc && wantsNearbyStation(text)) {
       pre = {
         kind: "ask_location",
