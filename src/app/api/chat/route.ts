@@ -2,11 +2,13 @@ import { runAgent, type ChatTurn } from "@/lib/agent";
 import {
   wantsNearbyStation,
   wantsDirections,
+  wantsStationLocation,
+  refersToPreviousStation,
   routeIn,
   lastStationDiscussed,
 } from "@/lib/message-hints";
 import { directionsLink } from "@/lib/directions";
-import { findStations, stationsMentionedIn } from "@/lib/stations";
+import { findStations, formatStation, stationsMentionedIn } from "@/lib/stations";
 import { resolvePlace } from "@/lib/places";
 
 export const runtime = "nodejs";
@@ -148,6 +150,26 @@ export async function POST(req: Request) {
           }
         }
         // Otherwise the destination can't be placed: let the model ask where to.
+      }
+    } else if (wantsStationLocation(text) && !wantsNearbyStation(text)) {
+      // "Where is it? / give me the location of this site" — the pin for a
+      // specific station: one named now, or the one just discussed. Answered
+      // here so a small model can't lose the reference and pick another
+      // station's location (and can't mangle the map link).
+      const named = stationsMentionedIn(text);
+      const name =
+        named[0] ??
+        (refersToPreviousStation(text) ? lastStationDiscussed(history.slice(0, -1)) : null);
+      if (name) {
+        const s = findStations({ city: name }).stations[0];
+        if (s) {
+          const map = formatStation(s).maps_link as string;
+          const where = s.address ? `${s.address}` : s.city;
+          pre = {
+            kind: "reply",
+            text: `**${s.name}** is at ${where}. Here it is on the map:\n\n[View on map](${map})`,
+          };
+        }
       }
     } else if (!hasLoc && wantsNearbyStation(text)) {
       pre = {

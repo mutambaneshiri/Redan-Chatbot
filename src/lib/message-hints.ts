@@ -133,6 +133,26 @@ export function wantsNearbyStation(text: string): boolean {
   return true;
 }
 
+// A request for where a station is — its map pin or address — as opposed to
+// turn-by-turn directions. English, Shona, isiNdebele.
+const LOCATION_REQUEST =
+  /\b(location|locate|located|where(?:'?s| is| are| can i find)?|whereabouts|map|pin|gps|co-?ordinates?|coordinates?|address|situated|kupi|iripi|ndepapi|ngaphi|kuphi)\b/i;
+
+/** True when the customer asks where something is (map / address). */
+export function wantsStationLocation(text: string): boolean {
+  return LOCATION_REQUEST.test(text);
+}
+
+// Words that stand in for a station named earlier ("this site", "it",
+// "there"), so a follow-up can be tied back to it.
+const REFERS_BACK =
+  /\b(it|its|it'?s|this|that|there|here|the (?:site|station|garage|place|one))\b/i;
+
+/** True when the message points back to a station already discussed. */
+export function refersToPreviousStation(text: string): boolean {
+  return REFERS_BACK.test(text);
+}
+
 const HEAD_OFFICE_RE = /\b(head ?office|hq|headquarters|main office)\b/i;
 
 /**
