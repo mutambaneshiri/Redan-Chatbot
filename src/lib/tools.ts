@@ -68,7 +68,7 @@ export const TOOL_SPECS: ToolSpec[] = [
   {
     name: "get_directions",
     description:
-      "Google Maps driving directions to a Redan station, Redan Head Office, or any place in Zimbabwe. Use this for EVERY directions request ('direct me', 'take me there', 'how do I get to...', 'from X to Y') and give the returned link as [Get directions](link). Never build a maps link yourself. Leave 'from' empty to start from the customer's current location.",
+      "Google Maps driving directions to a Redan station, Redan Head Office, or any place in Zimbabwe. Use this for EVERY directions request ('direct me', 'take me there', 'how do I get to...', 'from X to Y') and give the returned directions_link as a markdown link labelled Get directions — copy the whole URL, never the literal word 'link'. Never build a maps link yourself. Leave 'from' empty to start from the customer's current location.",
     parameters: {
       type: "object",
       properties: {
@@ -259,7 +259,7 @@ export async function executeTool(
                 to: d.to,
                 from: d.from,
                 directions_link: d.link,
-                tell_customer: `Give the link as [Get directions](link) and say it goes from ${d.from} to ${d.to}. Don't write turn-by-turn directions yourself.`,
+                tell_customer: `Give directions_link as a markdown link labelled "Get directions" — copy the whole URL, never the literal word "link" — and say it goes from ${d.from} to ${d.to}. Don't write turn-by-turn directions yourself.`,
               },
         ),
       };
