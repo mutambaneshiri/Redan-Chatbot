@@ -186,6 +186,27 @@ export function isJune2026CouponQuestion(text: string): boolean {
   return coupon && june2026;
 }
 
+// Redeeming / splitting / using part of a coupon — the rules differ between a
+// paper coupon and a digital RedanFlexi coupon, so the bot must know which.
+const COUPON_WORD = /\b(coupon|coupons|voucher|vouchers|makuponi|macoupon)\b/i;
+const COUPON_USE =
+  /\b(redeem|redeemed|redeeming|redemption|use|using|split|splitting|partial|partially|portion|divide|exact|balance|remaining|litres?|liters?|\d+\s?l(?:itres?)?)\b/i;
+// Words that already make the coupon type clear, so no need to ask.
+const COUPON_TYPE_SAID =
+  /\b(paper|physical|printed|hard[- ]?copy|digital|e-?coupon|in[- ]?app|app|redanflexi|flexi|online|electronic)\b/i;
+
+/**
+ * True when the customer asks about redeeming or splitting a coupon without
+ * having said whether it is a physical (paper) or digital (RedanFlexi) coupon.
+ */
+export function couponRedemptionNeedsType(text: string): boolean {
+  return (
+    COUPON_WORD.test(text) &&
+    COUPON_USE.test(text) &&
+    !COUPON_TYPE_SAID.test(text)
+  );
+}
+
 export type Language = "shona" | "ndebele" | "english";
 
 /** Best guess at the language of one message, from distinctive words. */
@@ -253,6 +274,10 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
   if (isJune2026CouponQuestion(last.content)) {
     notes.push(
       "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
+    );
+  } else if (couponRedemptionNeedsType(last.content)) {
+    notes.push(
+      "The customer is asking about redeeming, splitting or using part of a coupon but has NOT said whether it is a physical (paper) coupon or a digital RedanFlexi (app) coupon, and the rules differ. FIRST ask which one they have — do not assume. A PAPER coupon is redeemed for the full volume printed on it and cannot be split or partially redeemed; a DIGITAL RedanFlexi coupon can be split in the app to the exact volume wanted, with the balance kept for later. Never tell them a paper coupon can be partly redeemed or have a smaller volume selected at the pump.",
     );
   } else if (directionsTo) {
     const fromPart = route?.from
