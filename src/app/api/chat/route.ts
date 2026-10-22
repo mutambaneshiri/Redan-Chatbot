@@ -77,12 +77,20 @@ export async function POST(req: Request) {
           /\b(a|an|any|the)\s+(redan\s+)?(service\s+)?station\b/i.test(text));
 
       if (proximity) {
-        // Closest station to a named place (e.g. "closest to Parirenyatwa") is
-        // measured from that place and routed from it — independent of where
-        // the customer is now. With no place named it means closest to the
-        // customer, so ask them to share a location.
-        const anchor = resolvePlace(text);
+        // A place the request is measured from, if the customer named one.
+        // EXACT match only — a fuzzy guess can pick the wrong town (e.g.
+        // "Eastgate" -> "Westgate" in another city).
+        const anchor = resolvePlace(text, { fuzzy: false });
+        // True when the request is about the customer themselves / a station
+        // in general, with no other place named (ends in "...station", or
+        // says "near me").
+        const genericOnly =
+          /\b(near me|closest to me|nearest to me|around me|by me|my location|where i am|to me)\b/i.test(text) ||
+          /\b(?:the|a|an|any|my|your)?\s*(?:nearest|closest)?\s*(?:redan\s+)?(?:service\s+)?stations?\s*[?.!]*$/i.test(text);
+
         if (anchor) {
+          // Closest station to that place, routed from it — independent of
+          // where the customer is now.
           const nearest = findStations({ lat: anchor.lat, lng: anchor.lng }).stations[0];
           if (nearest) {
             const d = directionsLink(nearest.name, undefined, { lat: anchor.lat, lng: anchor.lng });
@@ -93,25 +101,31 @@ export async function POST(req: Request) {
               };
             }
           }
-        } else if (!hasLoc) {
-          pre = {
-            kind: "ask_location",
-            text:
-              "Happy to direct you to your nearest Redan station. Tap " +
-              "“Share my location” below so I can find it and route you there.",
-          };
-        } else {
-          const nearest = findStations({ lat: body.location!.lat, lng: body.location!.lng }).stations[0];
-          if (nearest) {
-            const d = directionsLink(nearest.name, undefined, body.location!);
-            if (!d.error) {
-              pre = {
-                kind: "reply",
-                text: `Your nearest Redan station is **${nearest.name}** (${nearest.city}). Here are driving directions from your location:\n\n[Get directions](${d.link})`,
-              };
+        } else if (genericOnly) {
+          // Closest to the customer: ask them to share a location.
+          if (!hasLoc) {
+            pre = {
+              kind: "ask_location",
+              text:
+                "Happy to direct you to your nearest Redan station. Tap " +
+                "“Share my location” below so I can find it and route you there.",
+            };
+          } else {
+            const nearest = findStations({ lat: body.location!.lat, lng: body.location!.lng }).stations[0];
+            if (nearest) {
+              const d = directionsLink(nearest.name, undefined, body.location!);
+              if (!d.error) {
+                pre = {
+                  kind: "reply",
+                  text: `Your nearest Redan station is **${nearest.name}** (${nearest.city}). Here are driving directions from your location:\n\n[Get directions](${d.link})`,
+                };
+              }
             }
           }
         }
+        // Otherwise a place was named but not recognised exactly: leave it to
+        // the model, which can resolve it (find_nearest_stations handles fuzzy
+        // matches and ambiguity) rather than guess or ask for the wrong point.
       } else {
         // A specific destination: a named station, "Head Office", or a place.
         const destination = route.to ?? lastStationDiscussed(history.slice(0, -1));
