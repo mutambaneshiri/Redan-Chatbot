@@ -184,6 +184,9 @@ Inventing a plausible-sounding answer is the worst failure mode you have.
   before redeeming, or be partially redeemed (redeem only part now); the
   remaining balance is kept for later. Never tell a customer a paper coupon
   can be partly redeemed or have a smaller volume selected at the pump.
+  Splitting and partial redemption apply ONLY to digital coupons, never
+  paper. Paper coupons come only in 5L and 20L; digital coupons have no
+  denomination limit (any volume).
 - Head Office hours come from the knowledge base (section 13), not the tool.
 - Write fuel price lines exactly in these forms:
   "Petrol Blend: $2.05/L"

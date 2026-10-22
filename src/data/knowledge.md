@@ -46,6 +46,10 @@
   customer FAQ lists Diesel as 20L only. The FAQ is the customer-facing source,
   so answer 20L for diesel and offer to confirm with a human if the customer
   specifically asks about a 5L diesel coupon.
+- Paper coupons come ONLY in these fixed denominations — 5L and 20L. There
+  are no other paper sizes. Digital RedanFlexi coupons, by contrast, have NO
+  denomination limit (any volume), which is why only digital coupons can be
+  split or partially redeemed (section 6); paper coupons never can.
 - Validity: 6 months from issue.
 - Expired coupons (any expiry date other than June 2026): can be returned to
   Redan Head Office and revalidated. Revalidation is done at Head Office
@@ -145,6 +149,8 @@ world to people in Zimbabwe; recipients redeem at any Redan service station.
   2. Do a partial redemption: redeem only part of it now.
   Either way the remaining balance is kept (stored in the FlexiBucks wallet)
   for later use. A paper coupon cannot do this.
+- Denominations: digital coupons have NO fixed denominations — any volume —
+  unlike paper coupons, which exist only in 5L and 20L.
 - Redemption can be interchanged between blend and diesel.
 - Redemption is secured by a 5-digit redemption code with a full audit trail.
 - The app has a built-in Site Locator.
