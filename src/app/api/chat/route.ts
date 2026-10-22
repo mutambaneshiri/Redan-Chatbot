@@ -6,6 +6,7 @@ import {
   lastStationDiscussed,
 } from "@/lib/message-hints";
 import { directionsLink } from "@/lib/directions";
+import { findStations } from "@/lib/stations";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -89,8 +90,33 @@ export async function POST(req: Request) {
             text: `Happy to direct you to ${probe.to}. Tap “Share my location” below so I can route you from where you are.`,
           };
         }
+      } else if (/\b(station|stations|garage|fuel|petrol|diesel|redan|nearest|closest)\b/i.test(text)) {
+        // Directions to "a station" / "the nearest station", no specific one
+        // named: find the nearest to the shared location and route there.
+        if (!hasLoc) {
+          pre = {
+            kind: "ask_location",
+            text:
+              "Happy to direct you to your nearest Redan station. Tap " +
+              "“Share my location” below so I can find it and route you there.",
+          };
+        } else {
+          const nearest = findStations({
+            lat: body.location!.lat,
+            lng: body.location!.lng,
+          }).stations[0];
+          if (nearest) {
+            const d = directionsLink(nearest.name, undefined, body.location!);
+            if (!d.error) {
+              pre = {
+                kind: "reply",
+                text: `Your nearest Redan station is **${nearest.name}** (${nearest.city}). Here are driving directions from your location:\n\n[Get directions](${d.link})`,
+              };
+            }
+          }
+        }
       }
-      // No destination, or it can't be placed: let the model ask where to.
+      // Otherwise (directions but no station/place context): model asks where to.
     } else if (!hasLoc && wantsNearbyStation(text)) {
       pre = {
         kind: "ask_location",

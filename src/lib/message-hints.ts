@@ -99,7 +99,7 @@ const ACCOUNT_CHOICE_NOTES: Record<AccountMethod, string> = {
 
 // Requests for directions, in English, Shona and isiNdebele.
 const DIRECTIONS =
-  /\b(direct me|directions?|take me|get there|get to|how do i get|navigate|navigation|route|guide me|show me the way|nzira|ndiendese|ndiratidze|ndiperekedze|indlela|ngikhombise)\b/i;
+  /\b(direct me|directed|directions?|take me|get there|get to|how do i get|navigate|navigation|route|guide me|show me the way|nzira|ndiendese|ndiratidze|ndiperekedze|indlela|ngikhombise)\b/i;
 
 export function wantsDirections(text: string): boolean {
   return DIRECTIONS.test(text);
