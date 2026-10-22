@@ -277,7 +277,7 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
     );
   } else if (couponRedemptionNeedsType(last.content)) {
     notes.push(
-      "The customer is asking about redeeming, splitting or using part of a coupon but has NOT said whether it is a physical (paper) coupon or a digital RedanFlexi (app) coupon, and the rules differ. FIRST ask which one they have — do not assume. A PAPER coupon is redeemed for the full volume printed on it and cannot be split or partially redeemed; a DIGITAL RedanFlexi coupon can be split in the app to the exact volume wanted, with the balance kept for later. Never tell them a paper coupon can be partly redeemed or have a smaller volume selected at the pump.",
+      "The customer is asking about redeeming, splitting or using part of a coupon but has NOT said whether it is a physical (paper) coupon or a digital RedanFlexi (app) coupon, and the rules differ. FIRST ask which one they have — do not assume. A PAPER coupon is redeemed for the full volume printed on it and cannot be split or partially redeemed; a DIGITAL RedanFlexi coupon can, in the app, either be split into the volumes wanted before redeeming OR be partially redeemed (redeem only part now), with the balance kept for later. Never tell them a paper coupon can be partly redeemed or have a smaller volume selected at the pump.",
     );
   } else if (directionsTo) {
     const fromPart = route?.from

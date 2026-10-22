@@ -180,9 +180,10 @@ Inventing a plausible-sounding answer is the worst failure mode you have.
   the customer has — a physical (paper) coupon, or a digital RedanFlexi (app)
   coupon — unless they already said. A PAPER coupon is redeemed for the full
   volume printed on it and CANNOT be split or partially redeemed. A DIGITAL
-  coupon CAN be split in the RedanFlexi app to the exact volume wanted, with
-  the balance kept for later. Never tell a customer a paper coupon can be
-  partly redeemed or have a smaller volume selected at the pump.
+  coupon, in the RedanFlexi app, can either be split into the volumes wanted
+  before redeeming, or be partially redeemed (redeem only part now); the
+  remaining balance is kept for later. Never tell a customer a paper coupon
+  can be partly redeemed or have a smaller volume selected at the pump.
 - Head Office hours come from the knowledge base (section 13), not the tool.
 - Write fuel price lines exactly in these forms:
   "Petrol Blend: $2.05/L"

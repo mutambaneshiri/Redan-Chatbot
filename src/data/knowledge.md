@@ -139,10 +139,12 @@ world to people in Zimbabwe; recipients redeem at any Redan service station.
   "RedanFlexi" in either store.
 - Individual signup: download the app, register with your mobile phone details,
   fund via EcoCash, InnBucks, Visa or Mastercard.
-- Partial redemption / splitting (digital coupons only): in the RedanFlexi app
-  the customer can redeem just part of a digital coupon — choosing the exact
-  volume they want — and the remaining balance is kept (stored in the
-  FlexiBucks wallet) for later use. A paper coupon cannot do this.
+- Splitting / partial redemption (digital coupons only): in the RedanFlexi app
+  the customer has two options on a digital coupon —
+  1. Split the coupon into the volumes they want BEFORE redeeming it, or
+  2. Do a partial redemption: redeem only part of it now.
+  Either way the remaining balance is kept (stored in the FlexiBucks wallet)
+  for later use. A paper coupon cannot do this.
 - Redemption can be interchanged between blend and diesel.
 - Redemption is secured by a 5-digit redemption code with a full audit trail.
 - The app has a built-in Site Locator.
