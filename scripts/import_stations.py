@@ -28,6 +28,15 @@ Optional, picked up automatically when present:
 Stations with no ADDRESS fall back to data-sources/website-addresses.json
 (addresses published on redan.co.zw). Stations with no coordinates fall back
 to data-sources/station-locations.json (positions with a recorded source).
+
+A coordinate spreadsheet may instead use a single "SERVICE STATION" column with
+the position in one combined "GPS CORDINATES" cell ("Latitude: .. Longitude:
+.."), optionally with an ADDRESS column (e.g. "Redan Service Station
+Coordinates.xlsx"). Both layouts are read, and a combined-cell address fills a
+station that has none. Coordinate rows are matched to stations by name,
+ignoring case, "BYO"/"CBD" suffixes, "Mt"/"Mount" and ordinal spellings, then by
+the station's aliases, then by COORD_OVERRIDES; any left unmatched are warned
+about.
 """
 
 import json
@@ -55,6 +64,50 @@ ALIASES = {
     "Masvingo Clipsham": ["Clipsham"],
     "Masvingo Pangolin": ["Pangolin"],
 }
+
+# Station name as written in a coordinate spreadsheet, for the few stations
+# whose name there differs too much to match by normalisation or an alias.
+# Keyed by the canonical STATION NAME from the details spreadsheet.
+COORD_OVERRIDES = {
+    "Hatcliffe": "Hatcliff",
+    "Chitungwiza": "Chitungwiza C Junction",
+}
+
+# Ordinal words and figures reduced to a digit so "Seventh Street" and "7th
+# Street" (and "Second"/"2nd") match.
+_ORDINALS = {
+    "first": "1", "1st": "1", "second": "2", "2nd": "2", "third": "3",
+    "3rd": "3", "fourth": "4", "4th": "4", "fifth": "5", "5th": "5",
+    "sixth": "6", "6th": "6", "seventh": "7", "7th": "7",
+}
+
+
+def norm_name(text: str) -> str:
+    """A station name reduced to its identifying words for matching: lower
+    case, no punctuation, without "Redan"/"BYO"/"CBD" and the like, "Mt" read
+    as "Mount" and ordinals as digits ("Seventh Street" -> "7 street")."""
+    t = re.sub(r"[^a-z0-9]+", " ", text.lower().replace("\xa0", " "))
+    out = []
+    for w in t.split():
+        if w in ("redan", "service", "station", "byo", "cbd"):
+            continue
+        if w == "mt":
+            w = "mount"
+        out.append(_ORDINALS.get(w, w))
+    return " ".join(out)
+
+
+def parse_latlng(text: str) -> tuple[float, float] | None:
+    """Pull latitude and longitude out of a combined cell. Handles labelled
+    forms ("Latitude: -17.8 Longitude: 31.0", a "Longitute" typo, lower case,
+    non-breaking spaces, a missing newline) and a plain "lat, lng" pair."""
+    s = text.replace("\xa0", " ")
+    lat = re.search(r"lat\w*\s*[:=]?\s*(-?\d{1,3}\.\d+)", s, re.I)
+    lng = re.search(r"long\w*\s*[:=]?\s*(-?\d{1,3}\.\d+)", s, re.I)
+    if lat and lng:
+        return float(lat.group(1)), float(lng.group(1))
+    m = re.search(r"(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)", s)
+    return (float(m.group(1)), float(m.group(2))) if m else None
 
 
 def read_first_sheet(path: Path) -> list[list[str]]:
@@ -140,24 +193,81 @@ def header_of(path: Path) -> tuple[list[list[str]], int | None, list[str]]:
     return rows, at, ([c.upper().strip() for c in rows[at]] if at is not None else [])
 
 
-def locations_from_sheets(skip: Path) -> dict[str, tuple[float, float, str]]:
-    """Station name (lower case) -> (lat, lng, file) from location spreadsheets."""
-    found: dict[str, tuple[float, float, str]] = {}
+CoordEntry = dict  # {"lat", "lng", "address", "file", "orig"}
+
+
+def locations_from_sheets(skip: Path) -> dict[str, CoordEntry]:
+    """Positions and addresses from every coordinate spreadsheet, keyed by the
+    normalised station name (norm_name). Two layouts are read: separate
+    LATITUDE / LONGITUDE columns, or one combined GPS cell with an optional
+    ADDRESS column. Later-saved files win on a repeated station."""
+    found: dict[str, CoordEntry] = {}
     for f in sorted(SOURCES.glob("*.xlsx"), key=lambda f: f.stat().st_mtime):
         if f.name.startswith("~$") or f.resolve() == skip.resolve():
             continue
-        rows, at, header = header_of(f)
-        if at is None or "LATITUDE" not in header or "LONGITUDE" not in header:
+        rows = read_first_sheet(f)
+        hrow = next(
+            (i for i, r in enumerate(rows) if any("STATION" in c.upper() for c in r)),
+            None,
+        )
+        if hrow is None:
             continue
-        cn, cla, clo = (header.index(h) for h in ("STATION NAME", "LATITUDE", "LONGITUDE"))
-        for r in rows[at + 1:]:
-            get = lambda i: r[i].strip() if i < len(r) else ""
-            if get(cn) and get(cla) and get(clo):
+        header = [c.upper().strip() for c in rows[hrow]]
+
+        def idx(*subs: str) -> int | None:
+            for i, h in enumerate(header):
+                if any(sub in h for sub in subs):
+                    return i
+            return None
+
+        c_name = idx("STATION NAME") or idx("SERVICE STATION")
+        if c_name is None:
+            continue
+        c_lat, c_lng = idx("LATITUDE"), idx("LONGITUDE")
+        c_gps = idx("GPS", "CORDIN", "COORDIN")
+        c_addr = idx("ADDRESS")
+        if c_lat is None and c_lng is None and c_gps is None:
+            continue
+
+        for r in rows[hrow + 1:]:
+            get = lambda i: r[i].strip() if i is not None and i < len(r) else ""
+            name = get(c_name)
+            if not name:
+                continue
+            lat = lng = None
+            if get(c_lat) and get(c_lng):
                 try:
-                    found[get(cn).lower()] = (float(get(cla)), float(get(clo)), f.name)
+                    lat, lng = float(get(c_lat)), float(get(c_lng))
                 except ValueError:
-                    print(f"  warning: {f.name}: bad coordinates for {get(cn)}")
+                    print(f"  warning: {f.name}: bad coordinates for {name}")
+            if lat is None and c_gps is not None:
+                ll = parse_latlng(get(c_gps))
+                if ll:
+                    lat, lng = ll
+            address = get(c_addr) or None
+            if lat is None and not address:
+                continue
+            found[norm_name(name)] = {
+                "lat": lat, "lng": lng, "address": address, "file": f.name, "orig": name,
+            }
     return found
+
+
+def resolve_coord(
+    name: str, aliases: list[str], coords: dict[str, CoordEntry],
+) -> tuple[str | None, CoordEntry | None]:
+    """The coordinate entry for a station, tried by an explicit override, then
+    its normalised name, then each alias. Returns the matched key (so the
+    caller can report what went unused) and the entry."""
+    keys = []
+    if name in COORD_OVERRIDES:
+        keys.append(norm_name(COORD_OVERRIDES[name]))
+    keys.append(norm_name(name))
+    keys += [norm_name(a) for a in aliases]
+    for k in keys:
+        if k in coords:
+            return k, coords[k]
+    return None, None
 
 
 def main() -> None:
@@ -244,8 +354,10 @@ def main() -> None:
 
     sheet_locations = locations_from_sheets(skip=src)
     if sheet_locations:
-        files = sorted({v[2] for v in sheet_locations.values()})
-        print(f"  map positions for {len(sheet_locations)} stations from {', '.join(files)}")
+        files = sorted({v["file"] for v in sheet_locations.values()})
+        with_coords = sum(1 for v in sheet_locations.values() if v["lat"] is not None)
+        print(f"  {with_coords} map positions from {', '.join(files)}")
+    matched_coords: set[str] = set()
 
     loc_file = SOURCES / "station-locations.json"
     known_locations = {
@@ -277,8 +389,11 @@ def main() -> None:
             lat, lng = float(cell(r, c_lat)), float(cell(r, c_lng))
         elif link and (ll := coords_from_link(link)):
             lat, lng = ll
-        if lat is None and name.lower() in sheet_locations:
-            lat, lng, _ = sheet_locations[name.lower()]
+        coord_key, coord = resolve_coord(name, ALIASES.get(name, []), sheet_locations)
+        if coord_key:
+            matched_coords.add(coord_key)
+        if lat is None and coord and coord["lat"] is not None:
+            lat, lng = coord["lat"], coord["lng"]
         known = known_locations.get(name.lower(), {})
         if lat is None and "lat" in known and "lng" in known:
             lat, lng = float(known["lat"]), float(known["lng"])
@@ -301,7 +416,8 @@ def main() -> None:
             "name": display,
             "aliases": ALIASES.get(name, []),
             "city": town,
-            "address": cell(r, c_address) or known.get("address") or web_addresses.get(name.lower()),
+            "address": cell(r, c_address) or known.get("address")
+            or (coord["address"] if coord else None) or web_addresses.get(name.lower()),
             "routeByAddress": bool(known.get("route_by_address")),
             # The site's cell number is the contact; a landline is kept only
             # as a fallback for stations with no cell number.
@@ -335,6 +451,14 @@ def main() -> None:
             warnings.append(f"{phone} is listed for {len(names)} stations: {', '.join(names)}")
     no_coords = sum(1 for s in stations if s["lat"] is None)
     no_manager = sum(1 for s in stations if not s["manager"])
+
+    # Coordinate rows that matched no station: a site not in the details list,
+    # or a name spelt too differently to match. Flag so it can be resolved.
+    for k, v in sheet_locations.items():
+        if k not in matched_coords and v["lat"] is not None:
+            warnings.append(
+                f"coordinates for '{v['orig']}' ({v['file']}) matched no station"
+            )
 
     out = {
         "_meta": {

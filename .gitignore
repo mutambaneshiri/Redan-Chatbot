@@ -11,3 +11,4 @@ out/
 next-env.d.ts
 evals/results/
 .DS_Store
+__pycache__/

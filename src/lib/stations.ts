@@ -174,6 +174,13 @@ const cleanName = (t: string) =>
     .trim();
 const byName = (s: Station) => [s.name, ...(s.aliases ?? [])];
 const byAny = (s: Station) => [s.city, s.address ?? "", ...byName(s)];
+// A station's town and own name — where the station actually IS. Used to place
+// a query before the gazetteer is consulted, so a road buried in a station's
+// address (e.g. Hatcliffe on "Domboshava Road") can't hijack a query for the
+// town of that name.
+const byTown = (s: Station) => [s.city, ...byName(s)];
+// Only the street address, tried as a last resort after place resolution.
+const byAddr = (s: Station) => [s.address ?? ""];
 const splitParts = (place: string) =>
   place.split(/,|\bin\b/i).map(cleanName).filter(Boolean);
 
@@ -219,12 +226,16 @@ function matchStationName(pool: Station[], place: string): Station[] {
   );
 }
 
-/** Stations in a town (or at an address) named in the query. */
-function matchTown(pool: Station[], place: string): Station[] {
-  const direct = matching(pool, cleanName(place), byAny);
+/** Stations matching a query in the given fields (town, address, ...). */
+function matchTown(
+  pool: Station[],
+  place: string,
+  fields: (s: Station) => string[] = byAny,
+): Station[] {
+  const direct = matching(pool, cleanName(place), fields);
   if (direct.length > 0) return direct;
   for (const part of splitParts(place)) {
-    const hit = matching(pool, part, byAny);
+    const hit = matching(pool, part, fields);
     if (hit.length > 0) return hit;
   }
   return [];
@@ -305,17 +316,24 @@ export function findStations(q: StationQuery): StationSearch {
 
   if (q.city) {
     const named = matchStationName(pool, q.city);
-    const town = named.length > 0 ? [] : matchTown(pool, q.city);
+    // Stations whose own town (or name) is the query — not their street
+    // address, which is tried only after the gazetteer, below.
+    const inTown = named.length > 0 ? [] : matchTown(pool, q.city, byTown);
     place =
       named.length > 0 ? undefined : (resolvePlace(q.city, { fuzzy: false }) ?? undefined);
 
     if (named.length > 0) {
       pool = named;
-    } else if (town.length > 0) {
-      pool = town;
+    } else if (inTown.length > 0) {
+      pool = inTown;
     } else if (place) {
+      // A real place with no station of its own: rank the nearest to it. This
+      // beats matching a station merely because its address names that road.
       pool = located(pool);
       nearestOnly = true;
+    } else if (matchTown(pool, q.city, byAddr).length > 0) {
+      // Not a known place, but a station's street address names it.
+      pool = matchTown(pool, q.city, byAddr);
     } else {
       const typo = matchTypo(pool, q.city);
       place = typo.length > 0 ? undefined : (resolvePlace(q.city) ?? undefined);
