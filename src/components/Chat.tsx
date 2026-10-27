@@ -39,10 +39,13 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
-  // Whether to show the "share my location" button. True at the start of the
-  // conversation, and set again by the server whenever a request needs a
-  // location (nearest station, directions). Cleared once a location is shared.
-  const [askLocation, setAskLocation] = useState(true);
+  // Whether to show the "share my location" button. Off to start with — a
+  // greeting or a general question shouldn't be met with an unsolicited
+  // location request. The server turns it on (a request_location event) only
+  // when a message actually needs a location (nearest station, directions,
+  // "where is it"). Cleared once a location is shared. The pin button in the
+  // composer is always available for a customer who wants to share first.
+  const [askLocation, setAskLocation] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -160,8 +163,8 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
 
     const next: Msg[] = [...messages, { role: "user", content: trimmed }];
     setInput("");
-    // Hide the start-of-chat location prompt; the server re-requests it if the
-    // question actually needs a location.
+    // Drop any standing location prompt; the server re-requests it only if
+    // this new question actually needs a location.
     setAskLocation(false);
 
     // Placeholder assistant bubble that fills in as deltas arrive.
