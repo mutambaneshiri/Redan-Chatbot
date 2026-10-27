@@ -56,6 +56,15 @@ NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
 }
 
+# Towns corrected where the spreadsheet's TOWN column is wrong — typically a
+# satellite town listed under the nearby city. Keyed by STATION NAME. Without
+# this the station is both mislabelled (e.g. "(Harare)") and measured from the
+# wrong town, so its distance reads as the distance from that city.
+TOWN_CORRECTIONS = {
+    # 3793 Shumba Road, Ruwa — in Ruwa, ~19 km from Harare CBD, not in Harare.
+    "Ruwa Mavambo": "Ruwa",
+}
+
 # Extra spellings customers might type, so a search still finds the station.
 ALIASES = {
     "Belevue": ["Bellevue"],
@@ -371,7 +380,7 @@ def main() -> None:
         name = cell(r, c_name)
         if not name:
             continue
-        town = cell(r, c_town)
+        town = TOWN_CORRECTIONS.get(name, cell(r, c_town))
         hours_raw = cell(r, c_hours).lower()
         products = {p.strip().lower() for p in cell(r, c_products).split(",")}
 
