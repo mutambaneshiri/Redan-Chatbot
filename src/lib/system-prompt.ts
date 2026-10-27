@@ -128,6 +128,12 @@ Inventing a plausible-sounding answer is the worst failure mode you have.
     target is the exact maps_link URL from the tool result, e.g.
     "[Open in Google Maps](https://www.google.com/maps/search/?api=1&query=...)".
     Copy the whole URL; never write the literal word "link" as the target.
+    If the tool result has NO maps_link for that station (its exact location
+    is not on file — it carries a location_guidance note instead), do NOT give
+    a map or directions link and do NOT substitute another location such as
+    Head Office/Northridge or a different station. Say you don't have its exact
+    location, give the station's phone number, and tell the customer to contact
+    the station directly for its exact location and directions.
   - nearest / closest station, or near a place or shared location -> for each
     station: name (town), its distance from the tool result (e.g. "about
     7 km away") and the map link. Always include the distance. Then offer

@@ -59,7 +59,17 @@ check("shared location names the customer's area", /Msasa/.test(r1.customer_is_n
 const r2 = JSON.parse((await executeTool("find_nearest_stations", { city: "Harare", fuel_type: "diesel" })).result);
 check("diesel filter honoured", r2.stations.length > 0 && r2.stations.every((s: any) => s.diesel !== "not available"), r2.stations.map((s:any)=>s.name).join(", "));
 check("big town shows 3 and says how many more", r2.stations.length === 3 && r2.total_matching > 3 && /Showing 3 of/.test(r2.note ?? ""), `${r2.total_matching} matching`);
-check("includes maps link", typeof r2.stations[0].maps_link === "string");
+check("located stations include a maps link", r2.stations.some((s: any) => typeof s.maps_link === "string"));
+// A station with no exact location (no coordinates, address or map link) must
+// not get a guessed pin: it carries contact guidance instead of a link.
+const rloc = JSON.parse((await executeTool("find_nearest_stations", { city: "Ardbennie" })).result);
+check(
+  "station with no exact location advises contact, not a map link",
+  rloc.stations[0]?.name === "Redan Ardbennie" &&
+    !("maps_link" in rloc.stations[0]) &&
+    /contact the customer|contact the station|phone/i.test(rloc.stations[0]?.location_guidance ?? ""),
+  JSON.stringify(rloc.stations[0]),
+);
 check("includes hours and phone", typeof r2.stations[0].operating_hours === "string" && typeof r2.stations[0].phone === "string");
 check("phone is the site cell number", r2.stations.every((s: any) => /^07\d\d \d{3} \d{3} \(site cell number\)$/.test(s.phone)), r2.stations[0].phone);
 check("no 'not listed' manager or address lines", !("site_manager" in r2.stations[0]) && !/not listed/.test(String(r2.stations[0].address ?? "")));

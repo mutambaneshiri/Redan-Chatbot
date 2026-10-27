@@ -419,13 +419,21 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
   const hasLocation = s.lat !== null && s.lng !== null && !s.locationApprox;
   // Pin links to the coordinates only when they are exact and trusted for routing.
   const pinByCoords = hasLocation && !(s.routeByAddress && s.address);
+  // Can we actually point the customer to this station? Only with exact
+  // coordinates, a street address, or a curated map link. An approximate
+  // suburb/town-centre position is NOT an exact location. When we have none of
+  // these we must not fabricate a spot (and never fall back to Head Office):
+  // give the station's phone and tell the customer to ask the station.
+  const locatable = hasLocation || !!s.address || !!s.mapsLink;
   return {
     name: s.name,
     town: s.city,
     // Missing fields are left out so the model doesn't list "not listed" lines.
     ...(s.address
       ? { address: s.address }
-      : { location: `No street address on file — give the town (${s.city}) and the map link.` }),
+      : locatable
+        ? { location: `No street address on file — give the town (${s.city}) and the map link.` }
+        : { location: `Exact location not on file.` }),
     phone: s.phone
       ? `${s.phone} (site cell number)`
       : s.landline
@@ -449,14 +457,24 @@ export function formatStation(s: RankedStation): Record<string, unknown> {
     lubricants: s.lubricants ? "yes" : "no",
     ...(s.refreshments !== undefined && { refreshments: s.refreshments ? "yes" : "no" }),
     ...(s.lpg !== undefined && { lpg_gas: lpgLine(s) }),
-    maps_link: pinByCoords
-      ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`
-      : (s.mapsLink ??
-        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name} ${s.city} Zimbabwe`,
-        )}`),
-    // Turn-by-turn directions. With no origin, Google Maps starts from the
-    // customer's current location on their phone.
-    directions_link: `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(stationRouteTarget(s))}`,
+    // A map/directions link only when we can place the station. Otherwise,
+    // guidance to give the phone and have the customer ask the station — never
+    // a guessed pin, and never Head Office/Northridge in its place.
+    ...(locatable
+      ? {
+          maps_link: pinByCoords
+            ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`
+            : (s.mapsLink ??
+              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                s.address ? `${s.name}, ${s.address}, Zimbabwe` : `${s.name} ${s.city} Zimbabwe`,
+              )}`),
+          // Turn-by-turn directions. With no origin, Google Maps starts from the
+          // customer's current location on their phone.
+          directions_link: `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(stationRouteTarget(s))}`,
+        }
+      : {
+          location_guidance:
+            "This station's exact location is NOT on file. Do not give a map or directions link, and do NOT substitute another location such as Head Office/Northridge or a different station. Give this station's phone number and tell the customer to contact the station directly for its exact location and directions.",
+        }),
   };
 }

@@ -9,6 +9,7 @@ import {
 } from "@/lib/message-hints";
 import { directionsLink } from "@/lib/directions";
 import { findStations, formatStation, stationsMentionedIn } from "@/lib/stations";
+import { SUPPORT_CHANNELS } from "@/lib/tools";
 import { resolvePlace } from "@/lib/places";
 
 export const runtime = "nodejs";
@@ -163,12 +164,27 @@ export async function POST(req: Request) {
       if (name) {
         const s = findStations({ city: name }).stations[0];
         if (s) {
-          const map = formatStation(s).maps_link as string;
-          const where = s.address ? `${s.address}` : s.city;
-          pre = {
-            kind: "reply",
-            text: `**${s.name}** is at ${where}. Here it is on the map:\n\n[View on map](${map})`,
-          };
+          const map = formatStation(s).maps_link as string | undefined;
+          if (map) {
+            const where = s.address ? `${s.address}` : s.city;
+            pre = {
+              kind: "reply",
+              text: `**${s.name}** is at ${where}. Here it is on the map:\n\n[View on map](${map})`,
+            };
+          } else {
+            // Exact location not on file: give the station's own contact and
+            // ask them to confirm with the station — never a guessed pin.
+            const phone = s.phone ?? s.landline;
+            pre = {
+              kind: "reply",
+              text: phone
+                ? `I don't have the exact map location for **${s.name}** (${s.city}) on file yet. ` +
+                  `Please call the station directly on ${phone} for its exact location and directions.`
+                : `I don't have the exact map location for **${s.name}** (${s.city}) on file yet, ` +
+                  `and there's no direct number listed for it. You can reach Redan customer support ` +
+                  `on ${SUPPORT_CHANNELS.phone} and they'll help you locate it.`,
+            };
+          }
         }
       }
     } else if (!hasLoc && wantsNearbyStation(text)) {
