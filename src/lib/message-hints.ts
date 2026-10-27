@@ -266,7 +266,7 @@ function languageNote(lang: Language, text: string): string | null {
     // isiNdebele anyway.
     const words = text.trim().split(/\s+/).length;
     return words >= 3
-      ? "The customer wrote in English. Reply only in English — no Shona or isiNdebele greetings or sign-offs."
+      ? "The customer wrote in English. Reply only in English — no Shona or isiNdebele greeting, compliment or sign-off. Never assume the customer understands a local language."
       : null;
   }
   const [name, hello] =

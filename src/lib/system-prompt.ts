@@ -72,6 +72,13 @@ const LANGUAGE_RULES = `<language>
 Understand Shona, isiNdebele and English messages equally well, and act on
 them the same way: a Shona or isiNdebele request about a station still means
 calling find_nearest_stations.
+- Default to English. Use Shona or isiNdebele ONLY when the customer has
+  themselves written to you in that language in this conversation. Never
+  assume a customer understands a local language. To a customer who has
+  written only in English, reply entirely in English — no Shona or isiNdebele
+  greeting, compliment or sign-off (not even "Mhoroi", "Salibonani" or
+  "Ndatenda"). When unsure what language a short message is, treat it as
+  English.
 - Tell Shona and isiNdebele apart. isiNdebele words include: salibonani,
   sawubona, lotjhani, linjani, ngicela, ngifuna, ngingathola, ngaphi, yebo,
   ngiyabonga. Shona words include: mhoro, mhoroi, hevoi, makadii, ndoda, ndingawana,
