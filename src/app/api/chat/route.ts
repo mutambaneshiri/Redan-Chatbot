@@ -4,6 +4,7 @@ import {
   wantsDirections,
   wantsStationLocation,
   refersToPreviousStation,
+  declinesOffer,
   routeIn,
   lastStationDiscussed,
 } from "@/lib/message-hints";
@@ -69,7 +70,12 @@ export async function POST(req: Request) {
 
   if (lastUser) {
     const text = lastUser.content;
-    if (wantsDirections(text)) {
+    if (declinesOffer(text)) {
+      // The customer is turning something down ("no", "I don't need
+      // directions"). Don't trigger a directions/location/nearest action on a
+      // refusal — even if it repeats those words. Let the model acknowledge it.
+      pre = { kind: "model" };
+    } else if (wantsDirections(text)) {
       const route = routeIn(text);
       const named = stationsMentionedIn(text);
       // "nearest / closest station", or "a station", with no specific station

@@ -153,6 +153,21 @@ export function refersToPreviousStation(text: string): boolean {
   return REFERS_BACK.test(text);
 }
 
+// A customer turning something down — "no", "no thanks", "I don't need
+// directions", "not the location". Used so a deterministic directions /
+// location action does not fire on the very message that refuses it, just
+// because that message repeats the word "directions" or "location".
+const DECLINE_LEAD =
+  /^(no|nope|nah|no\s+thanks?|no\s+thank\s+you|not\s+now|not\s+really|no\s+need|i'?m\s+(?:good|fine|ok(?:ay)?)|that'?s\s+(?:all|it|ok(?:ay)?)|stop|cancel|kwete|aiwa|hayi|hayibo|cha)\b/i;
+const DECLINE_INTENT =
+  /\b(?:no|not|don'?t|do\s+not|dont|without|rather\s+not|never\s*mind)\b[^.!?]*\b(?:directions?|navigat\w*|route|take\s+me|get\s+me\s+there|location|map|pin|gps)\b/i;
+
+/** True when the message declines an offer (optionally of directions / a location). */
+export function declinesOffer(text: string): boolean {
+  const t = text.trim();
+  return DECLINE_LEAD.test(t) || DECLINE_INTENT.test(t);
+}
+
 const HEAD_OFFICE_RE = /\b(head ?office|hq|headquarters|main office)\b/i;
 
 /**
@@ -291,6 +306,14 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
     ? (route.to ?? lastStationDiscussed(history.slice(0, -1)))
     : null;
 
+  // The customer is declining directions or a location the bot just offered.
+  const prevOfferedRoute =
+    !!prevAssistant &&
+    /\b(directions?|navigat\w*|route|map|location|share[^.!?]{0,20}location)\b/i.test(
+      prevAssistant.content,
+    );
+  const declinedRoute = declinesOffer(last.content) && prevOfferedRoute;
+
   if (isJune2026CouponQuestion(last.content)) {
     notes.push(
       "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
@@ -298,6 +321,10 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
   } else if (couponRedemptionNeedsType(last.content)) {
     notes.push(
       "The customer is asking about redeeming, splitting or using part of a coupon but has NOT said whether it is a physical (paper) coupon or a digital RedanFlexi (app) coupon, and the rules differ. FIRST ask which one they have — do not assume. A PAPER coupon is redeemed for the full volume printed on it and cannot be split or partially redeemed; a DIGITAL RedanFlexi coupon can, in the app, either be split into the volumes wanted before redeeming OR be partially redeemed (redeem only part now), with the balance kept for later. Never tell them a paper coupon can be partly redeemed or have a smaller volume selected at the pump.",
+    );
+  } else if (declinedRoute) {
+    notes.push(
+      "The customer has just declined the directions or location you offered. Acknowledge that briefly and move on: do NOT offer or give directions, a map or a location again, and do NOT call get_directions or find_nearest_stations for this. Ask how else you can help.",
     );
   } else if (directionsTo) {
     const fromPart = route?.from
