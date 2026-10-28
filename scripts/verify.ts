@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { accountMethodChosen, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, couponValidationRequest, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -166,6 +166,11 @@ const followUp = withMessageHints([
 check("station answer to a complaint sends customer to the station", /call Redan Mbare on that site cell number/.test(followUp[2].content) && /Do NOT call escalate_to_human/.test(followUp[2].content));
 check("complaint without station asks which station, no escalation", /ask which Redan station/.test(withMessageHints([{ role: "user", content: "My coupon was refused" }])[0].content));
 check("coupon price question uses ZERA", isPurchasePriceQuestion("How much do 20 litres of diesel coupons cost?") && /ZERA's published price/.test(withMessageHints([{ role: "user", content: "How much do 20 litres of diesel coupons cost?" }])[0].content));
+for (const msg of ["Can you check if my coupon is still valid?", "Is this coupon genuine?", "Please verify my voucher"]) {
+  const note = withMessageHints([{ role: "user", content: msg }])[0].content;
+  check(`coupon validation "${msg}" refers to Head Office and does not validate`, couponValidationRequest(msg) && /Head Office/.test(note) && /CANNOT|no access/.test(note), note.slice(-120));
+}
+check("ordinary coupon redemption is not treated as validation", !couponValidationRequest("How do I redeem a RedanFlexi coupon?"));
 check("station pump price question is not a coupon price question", !isPurchasePriceQuestion("What is the diesel price at Redan Mbare?"));
 check("petrol-only price question spotted", singleFuelAsked("What is the petrol price at Redan Mbare?") === "petrol");
 check("diesel-only price question spotted", singleFuelAsked("What's the diesel price at Redan Lobengula?") === "diesel");

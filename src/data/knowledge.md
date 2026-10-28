@@ -51,6 +51,12 @@
   denomination limit (any volume), which is why only digital coupons can be
   split or partially redeemed (section 6); paper coupons never can.
 - Validity: 6 months from issue.
+- Coupon validation / verification: the chatbot has NO access to Redan's
+  coupon system or database and CANNOT check whether a coupon is valid,
+  genuine or active. Never attempt to validate a coupon or state whether it is
+  valid. Refer any request to validate, verify or check a coupon to Redan Head
+  Office (contact details in section 1: phone 08677 009583, email
+  customersupport@redan.co.zw, or in person at the Head Office address).
 - Expired coupons (any expiry date other than June 2026): can be returned to
   Redan Head Office and revalidated. Revalidation is done at Head Office
   only — never tell a customer a station can revalidate a coupon.

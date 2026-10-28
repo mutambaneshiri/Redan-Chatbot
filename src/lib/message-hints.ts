@@ -242,6 +242,22 @@ export function couponRedemptionNeedsType(text: string): boolean {
   );
 }
 
+// Checking whether a coupon is valid, genuine or active. The bot has NO access
+// to Redan's coupon system, so it must never attempt this — such requests go
+// to Head Office.
+const COUPON_VALIDATE =
+  /\b(validat\w*|verif\w*|genuine|authentic|legit\w*|counterfeit|forg\w*|fake|still\s+valid|valid\s+or\s+not|real\s+or\s+fake)\b/i;
+
+/** True when the customer asks to validate / verify / check a coupon. */
+export function couponValidationRequest(text: string): boolean {
+  if (!COUPON_WORD.test(text)) return false;
+  return (
+    COUPON_VALIDATE.test(text) ||
+    /\bis\s+(?:it|this|my|the)\b[^?.!]*\bvalid\b/i.test(text) ||
+    /\bcheck\b[^?.!]*\b(?:coupon|voucher|valid)\b/i.test(text)
+  );
+}
+
 export type Language = "shona" | "ndebele" | "english";
 
 /** Best guess at the language of one message, from distinctive words. */
@@ -317,6 +333,10 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
   if (isJune2026CouponQuestion(last.content)) {
     notes.push(
       "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
+    );
+  } else if (couponValidationRequest(last.content)) {
+    notes.push(
+      "The customer wants to validate, verify or check whether a coupon is valid, genuine or active. You CANNOT do this: you have no access to Redan's coupon system or database. Do NOT attempt to validate the coupon, and do NOT say whether it is valid, genuine, active or fake. Tell the customer you're unable to check coupons yourself, and refer them to Redan Head Office to verify it: phone 08677 009583, email customersupport@redan.co.zw, or in person at 2 Northridge Close, Northridge Park, Borrowdale, Harare (Monday to Friday, 8 a.m. to 5 p.m.). Do not call any tool for this.",
     );
   } else if (couponRedemptionNeedsType(last.content)) {
     notes.push(
