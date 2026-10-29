@@ -92,7 +92,7 @@ const ACCOUNT_CHOICE_NOTES: Record<AccountMethod, string> = {
   online:
     "The customer chose to open the account ONLINE (option 1). Give the application form download link from the knowledge base, say to email the completed form to sales@redan.co.zw, and list the four requirements. Do not call find_nearest_stations.",
   station:
-    "The customer chose to open the account AT A SERVICE STATION (option 2). Do NOT call find_nearest_stations yet. Explain they can walk into any Redan service station and the account is created instantly, list the four requirements, then offer to find their nearest station if they tell you their town or suburb.",
+    "The customer chose to open the account AT A SERVICE STATION (option 2). Do NOT call find_nearest_stations yet. Explain they can walk into any Redan service station and the account is created instantly, list the four requirements, then offer to find their nearest station if they share their location or tell you their town or suburb.",
   headOffice:
     "The customer chose to open the account AT HEAD OFFICE (option 3). Give the Head Office address and hours (Monday to Friday, 8 a.m. to 5 p.m.) and list the four requirements. Do not call find_nearest_stations.",
 };
@@ -141,6 +141,19 @@ const LOCATION_REQUEST =
 /** True when the customer asks where something is (map / address). */
 export function wantsStationLocation(text: string): boolean {
   return LOCATION_REQUEST.test(text);
+}
+
+// The ASSISTANT's own reply is asking the customer where they are — to find a
+// nearest station or route them. Matches the wording the tool policy tells the
+// model to use ("share your location", "town or suburb"). Used on the model
+// path to raise the web "Share my location" button, so the customer gets a tap
+// instead of being left to type a town. English, Shona, isiNdebele.
+const ASKS_FOR_LOCATION =
+  /\b(share (?:your|my)(?: current)? location|(?:your|their)(?: current)? location\b|town or suburb|which (?:town|suburb|area)|nearest (?:town|suburb)|where (?:are you|you are)\b|whereabouts are you|tell me (?:your|which) (?:town|suburb|area|location)|uri kupi|muri kupi|ungaphi|ukuphi)\b/i;
+
+/** True when the assistant's reply is asking the customer for their location. */
+export function botAsksForLocation(text: string): boolean {
+  return ASKS_FOR_LOCATION.test(text);
 }
 
 // Words that stand in for a station named earlier ("this site", "it",

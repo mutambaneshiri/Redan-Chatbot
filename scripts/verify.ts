@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { accountMethodChosen, couponValidationRequest, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, botAsksForLocation, couponValidationRequest, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -171,6 +171,14 @@ for (const msg of ["Can you check if my coupon is still valid?", "Is this coupon
   check(`coupon validation "${msg}" refers to Head Office and does not validate`, couponValidationRequest(msg) && /Head Office/.test(note) && /CANNOT|no access/.test(note), note.slice(-120));
 }
 check("ordinary coupon redemption is not treated as validation", !couponValidationRequest("How do I redeem a RedanFlexi coupon?"));
+// When the bot's own reply asks the customer where they are, the route raises
+// the web "Share my location" button instead of leaving them to type a town.
+for (const msg of ["Could you share your town or suburb so I can find the nearest station for you?", "Please share your location and I'll find the closest Redan.", "Which town are you in?"]) {
+  check(`bot location request detected: "${msg.slice(0, 32)}..."`, botAsksForLocation(msg));
+}
+for (const msg of ["Your nearest Redan station is Redan Mbare (Harare).", "Please share your coupon number so I can look into it."]) {
+  check(`not a location request: "${msg.slice(0, 32)}..."`, !botAsksForLocation(msg));
+}
 check("station pump price question is not a coupon price question", !isPurchasePriceQuestion("What is the diesel price at Redan Mbare?"));
 check("petrol-only price question spotted", singleFuelAsked("What is the petrol price at Redan Mbare?") === "petrol");
 check("diesel-only price question spotted", singleFuelAsked("What's the diesel price at Redan Lobengula?") === "diesel");

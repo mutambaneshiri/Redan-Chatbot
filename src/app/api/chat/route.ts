@@ -7,6 +7,7 @@ import {
   declinesOffer,
   routeIn,
   lastStationDiscussed,
+  botAsksForLocation,
 } from "@/lib/message-hints";
 import { directionsLink } from "@/lib/directions";
 import { findStations, formatStation, stationsMentionedIn } from "@/lib/stations";
@@ -217,8 +218,16 @@ export async function POST(req: Request) {
           emit({ type: "text", text: pre.text });
           return;
         }
+        let modelText = "";
         for await (const event of runAgent(history)) {
+          if (event.type === "text") modelText += event.text;
           emit(event);
+        }
+        // If the model's reply asks the customer where they are and no location
+        // has been shared, raise the web "Share my location" button — a tap is
+        // better than leaving them to type a town.
+        if (!hasLoc && botAsksForLocation(modelText)) {
+          emit({ type: "request_location" });
         }
       } catch (err) {
         console.error("[redan] stream failed:", err);

@@ -204,7 +204,7 @@ export async function executeTool(
         return {
           result: JSON.stringify({
             stations: [],
-            note: `No Redan station in the database matches${input.city ? ` "${input.city}", and it is not a place in Zimbabwe we can locate` : " those filters"}. Do NOT quote prices or hours from any other station as though they answered this question. Ask the customer for the nearest town, suburb or growth point (or to share their location), and search again; if that fails, offer a human handoff.`,
+            note: `No Redan station in the database matches${input.city ? ` "${input.city}", and it is not a place in Zimbabwe we can locate` : " those filters"}. Do NOT quote prices or hours from any other station as though they answered this question. Ask the customer to share their location, or to tell you the nearest town or suburb, and search again; if that fails, offer a human handoff.`,
           }),
         };
       }
