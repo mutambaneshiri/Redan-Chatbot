@@ -224,8 +224,13 @@ export function isJune2026CouponQuestion(text: string): boolean {
 // Redeeming / splitting / using part of a coupon — the rules differ between a
 // paper coupon and a digital RedanFlexi coupon, so the bot must know which.
 const COUPON_WORD = /\b(coupon|coupons|voucher|vouchers|makuponi|macoupon)\b/i;
-const COUPON_USE =
-  /\b(redeem|redeemed|redeeming|redemption|use|using|split|splitting|partial|partially|portion|divide|exact|balance|remaining|litres?|liters?|\d+\s?l(?:itres?)?)\b/i;
+// An explicit redeem / split / use verb: this is clearly a usage question.
+const COUPON_ACTION =
+  /\b(redeem|redeemed|redeeming|redemption|use|using|split|splitting|partial|partially|portion|divide|exact|balance|remaining)\b/i;
+// A bare volume mention ("20 litres"): a weak signal, since a buying-price
+// question ("How much do 20 litres of diesel coupons cost?") also names a
+// volume. It only means redemption when it isn't really a price question.
+const COUPON_VOLUME = /\b(litres?|liters?|\d+\s?l(?:itres?)?)\b/i;
 // Words that already make the coupon type clear, so no need to ask.
 const COUPON_TYPE_SAID =
   /\b(paper|physical|printed|hard[- ]?copy|digital|e-?coupon|in[- ]?app|app|redanflexi|flexi|online|electronic)\b/i;
@@ -233,13 +238,13 @@ const COUPON_TYPE_SAID =
 /**
  * True when the customer asks about redeeming or splitting a coupon without
  * having said whether it is a physical (paper) or digital (RedanFlexi) coupon.
+ * A buying-price question ("...how much do the coupons cost?") is NOT this,
+ * even when it mentions a volume — it goes to the purchase-price branch.
  */
 export function couponRedemptionNeedsType(text: string): boolean {
-  return (
-    COUPON_WORD.test(text) &&
-    COUPON_USE.test(text) &&
-    !COUPON_TYPE_SAID.test(text)
-  );
+  if (!COUPON_WORD.test(text) || COUPON_TYPE_SAID.test(text)) return false;
+  if (COUPON_ACTION.test(text)) return true;
+  return COUPON_VOLUME.test(text) && !isPurchasePriceQuestion(text);
 }
 
 // Checking whether a coupon is valid, genuine or active. The bot has NO access
