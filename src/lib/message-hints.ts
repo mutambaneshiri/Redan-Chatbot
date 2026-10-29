@@ -223,17 +223,6 @@ export function lastStationDiscussed(history: ChatTurn[]): string | null {
   return null;
 }
 
-/** A question about coupons whose expiry date is June 2026. */
-export function isJune2026CouponQuestion(text: string): boolean {
-  const t = text.toLowerCase();
-  const coupon = /coupon|voucher|makuponi|macoupon/.test(t);
-  const june2026 =
-    /(june|jun|chikumi|nhlangulana)[^0-9]{0,6}(20)?26/.test(t) ||
-    /\b0?6\s*[\/.-]\s*(20)?26\b/.test(t) ||
-    /20?26\s*[\/.-]\s*0?6\b/.test(t);
-  return coupon && june2026;
-}
-
 // Redeeming / splitting / using part of a coupon — the rules differ between a
 // paper coupon and a digital RedanFlexi coupon, so the bot must know which.
 const COUPON_WORD = /\b(coupon|coupons|voucher|vouchers|makuponi|macoupon)\b/i;
@@ -274,6 +263,17 @@ export function couponValidationRequest(text: string): boolean {
     /\bis\s+(?:it|this|my|the)\b[^?.!]*\bvalid\b/i.test(text) ||
     /\bcheck\b[^?.!]*\b(?:coupon|voucher|valid)\b/i.test(text)
   );
+}
+
+// A coupon that has lapsed — "my coupon expired / is out of date". Handled
+// separately from a validation request so the answer can point to where to get
+// it checked or revalidated.
+const COUPON_EXPIRED =
+  /\b(expired|expir(?:es|ing)|expiry|lapsed|out of date|no longer valid|yapera|dzapera|rapera)\b/i;
+
+/** True when the customer says a coupon has expired / lapsed. */
+export function expiredCouponQuestion(text: string): boolean {
+  return COUPON_WORD.test(text) && COUPON_EXPIRED.test(text);
 }
 
 export type Language = "shona" | "ndebele" | "english";
@@ -348,13 +348,13 @@ export function withMessageHints(history: ChatTurn[]): ChatTurn[] {
     );
   const declinedRoute = declinesOffer(last.content) && prevOfferedRoute;
 
-  if (isJune2026CouponQuestion(last.content)) {
+  if (couponValidationRequest(last.content)) {
     notes.push(
-      "The customer has coupons expiring June 2026. Give exactly two options as a numbered list: 1. Go to Redan Head Office (address and Monday-Friday 8 a.m.-5 p.m. hours from the knowledge base); 2. Visit any nearby Redan service station and ask the attendant to do a coupon inquiry on the system. Then offer to find their nearest station. Don't say the station revalidates coupons. Do not call find_nearest_stations unless they name a place.",
+      "The customer wants to validate, verify or check whether a coupon is valid, genuine or active. You CANNOT do this yourself: you have no access to Redan's coupon system or database. Do NOT attempt to validate the coupon, and do NOT say whether it is valid, genuine, active or fake. Tell the customer you're unable to check coupons yourself, and that its validity can be checked at ANY Redan service station (the attendant does a coupon inquiry on the system) or at Redan Head Office (phone 08677 009583, email customersupport@redan.co.zw, or in person at 2 Northridge Close, Northridge Park, Borrowdale, Harare, Monday to Friday 8 a.m. to 5 p.m.). You may offer to find their nearest station if they share their location or name a place. Do not call any tool unless they name a place.",
     );
-  } else if (couponValidationRequest(last.content)) {
+  } else if (expiredCouponQuestion(last.content)) {
     notes.push(
-      "The customer wants to validate, verify or check whether a coupon is valid, genuine or active. You CANNOT do this: you have no access to Redan's coupon system or database. Do NOT attempt to validate the coupon, and do NOT say whether it is valid, genuine, active or fake. Tell the customer you're unable to check coupons yourself, and refer them to Redan Head Office to verify it: phone 08677 009583, email customersupport@redan.co.zw, or in person at 2 Northridge Close, Northridge Park, Borrowdale, Harare (Monday to Friday, 8 a.m. to 5 p.m.). Do not call any tool for this.",
+      "The customer's coupon has expired. Tell them its validity can be checked at ANY Redan service station (the attendant does a coupon inquiry on the system) or at Redan Head Office, and that an expired coupon can be returned to Redan Head Office to be revalidated. A service station checks a coupon but does not revalidate it, so don't say a station will revalidate it. Never say the coupon expired 'before' or 'after' a particular date. You may offer to find their nearest station if they share their location or name a place.",
     );
   } else if (couponRedemptionNeedsType(last.content)) {
     notes.push(

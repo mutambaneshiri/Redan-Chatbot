@@ -7,7 +7,7 @@ import { toWhatsAppText } from "../src/lib/whatsapp-format";
 import { SYSTEM_PROMPT } from "../src/lib/system-prompt";
 import { TOOL_SPECS, toAnthropicTools, toOpenAITools, executeTool, type ToolSpec } from "../src/lib/tools";
 import { STATION_DATA_IS_PLACEHOLDER, stationsMentionedIn } from "../src/lib/stations";
-import { accountMethodChosen, botAsksForLocation, couponValidationRequest, detectLanguage, isComplaint, isJune2026CouponQuestion, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
+import { accountMethodChosen, botAsksForLocation, couponValidationRequest, detectLanguage, expiredCouponQuestion, isComplaint, isPurchasePriceQuestion, lastStationDiscussed, routeIn, singleFuelAsked, wantsDirections, withMessageHints } from "../src/lib/message-hints";
 
 let fail = 0;
 const check = (name: string, cond: boolean, detail = "") => {
@@ -168,9 +168,22 @@ check("complaint without station asks which station, no escalation", /ask which 
 check("coupon price question uses ZERA", isPurchasePriceQuestion("How much do 20 litres of diesel coupons cost?") && /ZERA's published price/.test(withMessageHints([{ role: "user", content: "How much do 20 litres of diesel coupons cost?" }])[0].content));
 for (const msg of ["Can you check if my coupon is still valid?", "Is this coupon genuine?", "Please verify my voucher"]) {
   const note = withMessageHints([{ role: "user", content: msg }])[0].content;
-  check(`coupon validation "${msg}" refers to Head Office and does not validate`, couponValidationRequest(msg) && /Head Office/.test(note) && /CANNOT|no access/.test(note), note.slice(-120));
+  check(`coupon validation "${msg}" points to a station or Head Office, does not validate, and drops June 2026`, couponValidationRequest(msg) && /service station/.test(note) && /Head Office/.test(note) && /CANNOT|no access/.test(note) && !/June 2026/i.test(note), note.slice(-140));
 }
 check("ordinary coupon redemption is not treated as validation", !couponValidationRequest("How do I redeem a RedanFlexi coupon?"));
+// An expired-coupon question: validity checked at any station or Head Office,
+// revalidation at Head Office, and no "June 2026" wording anywhere.
+for (const msg of ["My coupon expired last month, what now?", "My coupons have expired"]) {
+  const note = withMessageHints([{ role: "user", content: msg }])[0].content;
+  check(`expired coupon "${msg}" -> station or Head Office, no June 2026`, expiredCouponQuestion(msg) && /service station/.test(note) && /Head Office/.test(note) && !/June ?2026/i.test(note), note.slice(-140));
+}
+{
+  // The customer's own text names June 2026; the SERVER NOTE must not echo it
+  // back as a rule. Check only the appended note, not the quoted input.
+  const full = withMessageHints([{ role: "user", content: "My coupons were supposed to expire in June 2026. What can I do?" }])[0].content;
+  const serverNote = full.slice(full.indexOf("[Server note"));
+  check("the server note never mentions June 2026", !/June ?2026/i.test(serverNote), serverNote.slice(0, 80));
+}
 // When the bot's own reply asks the customer where they are, the route raises
 // the web "Share my location" button instead of leaving them to type a town.
 for (const msg of ["Could you share your town or suburb so I can find the nearest station for you?", "Please share your location and I'll find the closest Redan.", "Which town are you in?"]) {
@@ -201,7 +214,6 @@ const rdl = JSON.parse((await executeTool("find_nearest_stations", { city: "Glen
 check("stations carry a Google Maps directions link", /^https:\/\/www\.google\.com\/maps\/dir\/\?api=1&travelmode=driving&destination=-17\.82/.test(rdl.stations[0]?.directions_link ?? ""), rdl.stations[0]?.directions_link);
 const r7 = JSON.parse((await executeTool("find_nearest_stations", { city: "Seventh Street" })).result);
 check("Seventh Street directions go to Jason Moyo by address", /destination=Redan%20Seventh%20Street%2C%20Cnr%20Seventh%20Street%20%26%20Jason%20Moyo%20Avenue/.test(r7.stations[0]?.directions_link ?? ""), r7.stations[0]?.directions_link);
-check("June 2026 coupons spotted", isJune2026CouponQuestion("My coupons were supposed to expire in June 2026") && isJune2026CouponQuestion("coupon expiry 06/2026") && !isJune2026CouponQuestion("My coupon expired last month"));
 const rf = routeIn("Give me directions from Redan Glenara to Redan Head Office");
 check("'from Glenara to Head Office' parsed", rf.from === "Glenara" && rf.to === "Head Office", JSON.stringify(rf));
 const gd = JSON.parse((await executeTool("get_directions", { to: "Head Office", from: "Redan Glenara" })).result);
