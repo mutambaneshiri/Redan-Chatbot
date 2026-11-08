@@ -1,5 +1,5 @@
 import { directionsLink } from "./directions";
-import { describePlace, nearestPlace } from "./places";
+import { describePlace } from "./places";
 import {
   findStations,
   formatStation,
@@ -213,7 +213,6 @@ export async function executeTool(
       const nearest = shown[0].distanceKm;
       const hasDistances = shown.some((s) => s.distanceKm >= 0);
       const where = search.place ? describePlace(search.place) : undefined;
-      const pin = sharedLocationOnly ? nearestPlace(lat!, lng!) : null;
       let note: string | undefined;
       if (search.nearestOnly && where) {
         note = `Redan has no station in ${where}. These are the nearest Redan stations to it, by straight-line distance (road distance is longer). Tell the customer there is no station in ${search.place!.name} itself, then give these as the nearest, each with its town and roughly how far it is. Do NOT present them as being in ${search.place!.name}.${
@@ -232,13 +231,15 @@ export async function executeTool(
       return {
         result: JSON.stringify({
           ...(where && { searched_place: where }),
-          ...(pin && { customer_is_near: describePlace(pin) }),
           stations: shown.map(formatStation),
           total_matching: search.nearestOnly ? shown.length : matches.length,
           ...(note && { note }),
           ...(hasDistances && {
             how_to_answer:
-              "List each station as: **name** (town) — its distance (e.g. \"about 7 km away\") — map link. Always include every station's distance; where it says the exact distance is not known, say the station is in its town instead. Don't add prices, hours or phone numbers unless the customer asked; offer them instead.",
+              "List each station as: **name** (town) — its distance (e.g. \"about 7 km away\") — map link. Always include every station's distance; where it says the exact distance is not known, say the station is in its town instead. Don't add prices, hours or phone numbers unless the customer asked; offer them instead." +
+              (sharedLocationOnly
+                ? " These are ranked by straight-line distance from the customer's shared location, which is only approximate. Say they are the closest Redan stations to the customer's location. Do NOT state which town or suburb the customer is in or near — you don't know that reliably, so naming it will often be wrong."
+                : ""),
           }),
           data_status: STATION_DATA_IS_PLACEHOLDER
             ? "SEED DATA — tell the customer prices are indicative and to confirm at the station"

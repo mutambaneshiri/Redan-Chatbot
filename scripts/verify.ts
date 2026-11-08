@@ -54,7 +54,11 @@ console.log("\n── Tool execution ──");
 // A pin in Msasa, Harare.
 const r1 = JSON.parse((await executeTool("find_nearest_stations", { lat: -17.8406, lng: 31.1161 })).result);
 check("shared location ranks stations by distance", r1.stations[0]?.name === "Redan Msasa", r1.stations.map((s: any) => s.name).join(", "));
-check("shared location names the customer's area", /Msasa/.test(r1.customer_is_near ?? ""), r1.customer_is_near);
+// A shared pin must NOT be reverse-geocoded to a suburb and asserted back: the
+// nearest centroid is unreliable at suburb level ("you are in Arcadia" when you
+// are not). The result carries no area claim, and tells the model not to make one.
+check("shared location does not claim the customer's suburb", !("customer_is_near" in r1) && !("searched_place" in r1), JSON.stringify(Object.keys(r1)));
+check("shared location tells the model not to name the customer's area", /Do NOT state which town or suburb the customer is in/.test(r1.how_to_answer ?? ""), r1.how_to_answer);
 
 const r2 = JSON.parse((await executeTool("find_nearest_stations", { city: "Harare", fuel_type: "diesel" })).result);
 check("diesel filter honoured", r2.stations.length > 0 && r2.stations.every((s: any) => s.diesel !== "not available"), r2.stations.map((s:any)=>s.name).join(", "));
