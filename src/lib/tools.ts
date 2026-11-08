@@ -238,7 +238,7 @@ export async function executeTool(
             how_to_answer:
               "List each station as: **name** (town) — its distance (e.g. \"about 7 km away\") — map link. Always include every station's distance; where it says the exact distance is not known, say the station is in its town instead. Don't add prices, hours or phone numbers unless the customer asked; offer them instead." +
               (sharedLocationOnly
-                ? " These are ranked by straight-line distance from the customer's shared location, which is only approximate. Say they are the closest Redan stations to the customer's location. Do NOT state which town or suburb the customer is in or near — you don't know that reliably, so naming it will often be wrong."
+                ? " These are ranked by straight-line distance from the customer's shared location, which is only approximate. Say they are the closest Redan stations to the customer's location. Do NOT state which town or suburb the customer is in or near — you don't know that reliably, so naming it will often be wrong. A shared location can be off by kilometres (a phone pin snapped to the wrong spot, or a desktop positioned by its network), so end by inviting the customer to tell you their suburb or area if these don't look close to them, and you'll re-check."
                 : ""),
           }),
           data_status: STATION_DATA_IS_PLACEHOLDER

@@ -70,11 +70,23 @@ export default function Chat({ usingSeedData }: { usingSeedData: boolean }) {
         };
         setLocation(loc);
         setAskLocation(false);
-        setError(null);
+        // A desktop/laptop without GPS positions by IP or Wi-Fi, which can be
+        // off by kilometres (it often snaps to the city centre or the ISP). If
+        // the fix is that coarse, the "nearest" stations may be wrong, so tell
+        // the customer they can type their suburb to get an accurate result.
+        // accuracy is the radius in metres; > 3 km means don't trust it.
+        const coarse = typeof pos.coords.accuracy === "number" && pos.coords.accuracy > 3000;
+        setError(
+          coarse
+            ? "Your location came through only roughly (your device has no precise fix). If the stations below aren't near you, type your suburb — e.g. \"Glen Norah\" — and I'll re-check."
+            : null,
+        );
         then?.(loc);
       },
       () => setError("Couldn't get your location. Type your town instead."),
-      { timeout: 8000 },
+      // High accuracy asks a phone to use GPS; maximumAge: 0 avoids a stale
+      // cached fix from an earlier, different location.
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
     );
   }
 
