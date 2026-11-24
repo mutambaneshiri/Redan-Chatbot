@@ -5,6 +5,7 @@ import {
   wantsStationLocation,
   refersToPreviousStation,
   declinesOffer,
+  isComplaint,
   routeIn,
   lastStationDiscussed,
   botAsksForLocation,
@@ -12,12 +13,67 @@ import {
 import { directionsLink } from "@/lib/directions";
 import { findStations, formatStation, stationsMentionedIn } from "@/lib/stations";
 import { SUPPORT_CHANNELS } from "@/lib/tools";
-import { resolvePlace } from "@/lib/places";
+import { resolvePlace, describePlace } from "@/lib/places";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type IncomingMessage = { role: "user" | "assistant"; content: string };
+
+// Build a nearest-stations list in code rather than letting the model compose
+// it. Small models copy or invent the map links (e.g. giving one station
+// another's coordinates), so the links here come straight from formatStation:
+// a station with no exact location gets its phone number, never a guessed pin.
+type StationSearch = ReturnType<typeof findStations>;
+
+// Words that mean the query needs the model (a fuel/hours/price filter), so the
+// deterministic list — which quotes neither prices nor availability — bows out.
+const STATION_FILTER =
+  /\b(diesel|blend|petrol|unleaded|e[\s-]?20|d[\s-]?50|24\s*h(?:ou)?rs?|24\/7|open|price|prices|cost|rate|how much|cheap\w*|lubricants?|lpg|\bgas\b|refreshments?)\b/i;
+// The customer wants stations by place or proximity (not one named station).
+const STATION_LIST_INTENT =
+  /\b(stations?|garages?|service stations?|filling stations?|petrol stations?|fuel stations?|nearest|closest|near|around|close to|location|locate|where)\b/i;
+
+function distancePhrase(s: StationSearch["stations"][number]): string {
+  if (s.distanceKm == null || s.distanceKm < 0) return "";
+  const km = s.distanceKm < 10 ? s.distanceKm.toFixed(1) : String(Math.round(s.distanceKm));
+  return s.locationApprox ? ` — about ${km} km away (approx.)` : ` — about ${km} km away`;
+}
+
+function renderStationList(search: StationSearch, placeLabel?: string): string | null {
+  const shown = search.stations.slice(0, 3);
+  if (shown.length === 0) return null;
+  const lines = shown.map((s) => {
+    const map = formatStation(s).maps_link as string | undefined;
+    const label = map ? `[${s.name}](${map})` : `**${s.name}**`;
+    const contact = map
+      ? ""
+      : s.phone ?? s.landline
+        ? ` — call ${s.phone ?? s.landline} for its exact location`
+        : ` — contact Redan support on ${SUPPORT_CHANNELS.phone} for its location`;
+    return `- ${label} (${s.city})${distancePhrase(s)}${contact}`;
+  });
+  const lead =
+    search.nearestOnly && placeLabel
+      ? `There's no Redan station in ${placeLabel} itself — here are the closest ones:`
+      : placeLabel
+        ? `Here are the Redan stations nearest ${placeLabel}:`
+        : `Here are the Redan stations closest to your location:`;
+  return `${lead}\n\n${lines.join("\n")}\n\nWould you like prices, opening hours or contact details for any of them?`;
+}
+
+// A "stations near/in <place>" request we can answer deterministically: no
+// specific station named, no fuel/price filter, not a complaint, and a place we
+// can locate. Returns null to leave anything else to the model.
+function placeStationList(text: string): string | null {
+  if (STATION_FILTER.test(text)) return null;
+  if (isComplaint(text)) return null;
+  if (stationsMentionedIn(text).length > 0) return null;
+  if (!STATION_LIST_INTENT.test(text)) return null;
+  const place = resolvePlace(text, { fuzzy: false });
+  if (!place) return null;
+  return renderStationList(findStations({ city: place.name }), describePlace(place));
+}
 
 export async function POST(req: Request) {
   let body: { messages?: IncomingMessage[]; location?: { lat: number; lng: number } };
@@ -193,14 +249,32 @@ export async function POST(req: Request) {
             };
           }
         }
+      } else {
+        // No specific station named ("location in Glen Norah"): if it resolves
+        // to a place, list the nearest stations deterministically.
+        const list = placeStationList(text);
+        if (list) pre = { kind: "reply", text: list };
       }
-    } else if (!hasLoc && wantsNearbyStation(text)) {
-      pre = {
-        kind: "ask_location",
-        text:
-          "Happy to find the Redan stations closest to you. Tap " +
-          "“Share my location” below so I can see where you are.",
-      };
+    } else if (wantsNearbyStation(text)) {
+      if (hasLoc) {
+        // Nearest to the shared location — built in code so the links are right.
+        const list = renderStationList(
+          findStations({ lat: body.location!.lat, lng: body.location!.lng }),
+        );
+        if (list) pre = { kind: "reply", text: list };
+      } else {
+        pre = {
+          kind: "ask_location",
+          text:
+            "Happy to find the Redan stations closest to you. Tap " +
+            "“Share my location” below so I can see where you are.",
+        };
+      }
+    } else {
+      // "Stations near Glen Norah" and similar: a place-based station list the
+      // detectors above don't catch. Deterministic so the map links are correct.
+      const list = placeStationList(text);
+      if (list) pre = { kind: "reply", text: list };
     }
   }
 
