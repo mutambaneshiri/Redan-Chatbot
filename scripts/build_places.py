@@ -108,7 +108,7 @@ PROVINCE_FIXES = {
     "Cannock Close": "Harare",
     "Cold Comfort": "Harare",
     "Crowborough North": "Harare",
-    "Dzivareskwa": "Harare",
+    "Dzivarasekwa": "Harare",
     "Gevstein Park": "Harare",
     "Glenview": "Harare",
     "Hillview": "Harare",
@@ -167,7 +167,10 @@ def main() -> None:
             continue
         lat_f, lng_f = FIXES.get(gid, (float(lat), float(lng)))
         province = PROVINCES.get(r[10])
-        if kind == "suburb" and name in PROVINCE_FIXES and near_city(float(lat), float(lng)):
+        # GeoNames classifies these high-density Harare/Bulawayo areas
+        # inconsistently as "suburb" or "town", so the province fix applies to
+        # both (still gated by the exact name and proximity to the city).
+        if kind in ("suburb", "town") and name in PROVINCE_FIXES and near_city(float(lat), float(lng)):
             province = PROVINCE_FIXES[name]
         population = int(r[14] or 0)
         entry = [
