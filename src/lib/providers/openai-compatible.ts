@@ -40,8 +40,13 @@ export class OpenAICompatibleProvider implements Provider {
     this.client = new OpenAI({
       apiKey,
       baseURL: config.baseURL ?? undefined,
-      // Free tiers rate-limit aggressively; let the SDK back off for us.
-      maxRetries: 3,
+      // Free tiers rate-limit aggressively, often as a short per-second burst
+      // cap: one tool-using turn fires several requests in ~1s and trips it.
+      // The SDK honours Retry-After and backs off, so a few extra retries ride
+      // out a brief burst (the window frees within seconds) before the customer
+      // ever sees the "getting a lot of messages" message. It cannot help once
+      // a longer quota window is genuinely spent — that needs a paid tier.
+      maxRetries: 5,
       timeout: 60_000,
     });
   }
